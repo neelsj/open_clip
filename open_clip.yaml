@@ -1,0 +1,40 @@
+description: WS-DETR_COCO
+
+target:
+  service: amlk8s
+  name: itphyperdgx2cl2
+  vc: hcrr06
+
+environment:
+  image: tmlabonte/ws-detr:latest
+  setup:
+  - sh make.sh
+  
+code:
+  local_dir: $CONFIG_DIR/
+
+storage:
+  cvgroupsouthcentral:
+    storage_account_name: cvgroupsouthcentral
+    container_name: datasets
+
+jobs:
+- name: orig
+  sku: G16
+  command:
+  - python src/main.py -c cfgs/coco.yaml 2>/dev/null
+
+- name: direct
+  sku: G16
+  command:
+  - python src/main.py -c cfgs/coco.yaml --direct_objectness 2>/dev/null
+
+- name: orig_sparse
+  sku: G16
+  command:
+  - python src/main.py -c cfgs/coco.yaml --sparse 2>/dev/null
+
+- name: direct_sparse
+  sku: G16
+  command:
+  - python src/main.py -c cfgs/coco.yaml --direct_objectness --sparse 2>/dev/null

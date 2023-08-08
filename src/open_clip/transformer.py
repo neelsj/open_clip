@@ -8,7 +8,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from .utils import to_2tuple
-
+from .utils import freeze_batch_norm_2d
 
 class LayerNormFp32(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16 (by casting to float32 and back)."""
@@ -395,37 +395,40 @@ class VisionTransformer(nn.Module):
         self.init_parameters()
 
     def lock(self, unlocked_groups=0, freeze_bn_stats=False):
-        for param in self.parameters():
-            param.requires_grad = False
+            for param in self.parameters():
+                param.requires_grad = False
 
-        if unlocked_groups != 0:
-            groups = [
-                [
-                    self.conv1,
-                    self.class_embedding,
-                    self.positional_embedding,
-                    self.ln_pre,
-                ],
-                *self.transformer.resblocks[:-1],
-                [
-                    self.transformer.resblocks[-1],
-                    self.ln_post,
-                ],
-                self.proj,
-            ]
+            if freeze_bn_stats:
+                freeze_batch_norm_2d(self)
 
-            def _unlock(x):
-                if isinstance(x, Sequence):
-                    for g in x:
-                        _unlock(g)
-                else:
-                    if isinstance(x, torch.nn.Parameter):
-                        x.requires_grad = True
+            if unlocked_groups != 0:
+                groups = [
+                    [
+                        self.conv1,
+                        self.class_embedding,
+                        self.positional_embedding,
+                        self.ln_pre,
+                    ],
+                    *self.transformer.resblocks[:-1],
+                    [
+                        self.transformer.resblocks[-1],
+                        self.ln_post,
+                    ],
+                    self.proj,
+                ]
+
+                def _unlock(x):
+                    if isinstance(x, Sequence):
+                        for g in x:
+                            _unlock(g)
                     else:
-                        for p in x.parameters():
-                            p.requires_grad = True
+                        if isinstance(x, torch.nn.Parameter):
+                            x.requires_grad = True
+                        else:
+                            for p in x.parameters():
+                                p.requires_grad = True
 
-            _unlock(groups[-unlocked_groups:])
+                _unlock(groups[-unlocked_groups:])
 
     def init_parameters(self):
         # FIXME OpenAI CLIP did not define an init for the VisualTransformer
@@ -553,6 +556,42 @@ class TextTransformer(nn.Module):
         self.register_buffer('attn_mask', self.build_attention_mask(), persistent=False)
 
         self.init_parameters()
+
+    def lock(self, unlocked_groups=0, freeze_bn_stats=False):
+            for param in self.parameters():
+                param.requires_grad = False
+
+            if freeze_bn_stats:
+                freeze_batch_norm_2d(self)
+
+            if unlocked_groups != 0:
+                groups = [
+                    [
+                        self.conv1,
+                        self.class_embedding,
+                        self.positional_embedding,
+                        self.ln_pre,
+                    ],
+                    *self.transformer.resblocks[:-1],
+                    [
+                        self.transformer.resblocks[-1],
+                        self.ln_post,
+                    ],
+                    self.proj,
+                ]
+
+                def _unlock(x):
+                    if isinstance(x, Sequence):
+                        for g in x:
+                            _unlock(g)
+                    else:
+                        if isinstance(x, torch.nn.Parameter):
+                            x.requires_grad = True
+                        else:
+                            for p in x.parameters():
+                                p.requires_grad = True
+
+                _unlock(groups[-unlocked_groups:])
 
     def init_parameters(self):
         nn.init.normal_(self.token_embedding.weight, std=0.02)

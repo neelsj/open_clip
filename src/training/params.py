@@ -166,6 +166,10 @@ def parse_args(args):
         help="Power for polynomial cooldown schedule. Default: 1.0 (linear decay)"
     )
     parser.add_argument(
+        "--train_subsample", type=float, default=None,
+        help="Subsample training data"
+    )
+    parser.add_argument(
         "--save-frequency", type=int, default=1, help="How often to save checkpoints."
     )
     parser.add_argument(

@@ -307,6 +307,9 @@ def main(args):
         gain_or_bias_params = [p for n, p in named_parameters if exclude(n, p) and p.requires_grad]
         rest_params = [p for n, p in named_parameters if include(n, p) and p.requires_grad]
 
+        print("num gain_or_bias_params to optimize %d" % len(gain_or_bias_params))
+        print("num rest_params to optimize %d" % len(rest_params))
+
         optimizer = optim.AdamW(
             [
                 {"params": gain_or_bias_params, "weight_decay": 0.},
@@ -418,9 +421,6 @@ def main(args):
         train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
         completed_epoch = epoch + 1
 
-        if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
-            evaluate(model, data, completed_epoch, args, writer)
-
         # Saving checkpoints.
         if args.save_logs:
             checkpoint_dict = {
@@ -450,6 +450,9 @@ def main(args):
                 latest_save_path = os.path.join(args.checkpoint_path, LATEST_CHECKPOINT_NAME)
                 torch.save(checkpoint_dict, tmp_save_path)
                 os.replace(tmp_save_path, latest_save_path)
+
+        if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
+            evaluate(model, data, completed_epoch, args, writer)
 
     if args.wandb and is_master(args):
         wandb.finish()

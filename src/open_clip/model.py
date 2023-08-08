@@ -209,12 +209,15 @@ class CLIP(nn.Module):
         self.ln_final = text.ln_final
         self.text_projection = text.text_projection
         self.register_buffer('attn_mask', text.attn_mask, persistent=False)
-
+        self.text = text
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
     def lock_image_tower(self, unlocked_groups=0, freeze_bn_stats=False):
         # lock image tower as per LiT - https://arxiv.org/abs/2111.07991
         self.visual.lock(unlocked_groups=unlocked_groups, freeze_bn_stats=freeze_bn_stats)
+
+    def lock_text_tower(self, unlocked_layers: int = 0, freeze_layer_norm: bool = True):
+        self.text.lock(unlocked_layers, freeze_layer_norm)
 
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
@@ -419,7 +422,7 @@ def build_model_from_openai_state_dict(
         state_dict.pop(key, None)
 
     convert_weights_to_fp16(model)  # OpenAI state dicts are partially converted to float16
-    model.load_state_dict(state_dict)
+    model.load_state_dict(state_dict, strict=False)
     return model.eval()
 
 

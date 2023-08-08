@@ -1,0 +1,110 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{24a0ad6f-c932-43b1-9269-7283f5cdb141}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>src\training\main.py</StartupFile>
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId>Global|VisualStudio|open_clip</InterpreterId>
+    <IsWindowsApplication>False</IsWindowsApplication>
+    <CommandLineArguments>--dataset-type "csv" --train-data "E:/Source/GRIT/grit-20m/images/images_0000_to_0009_interleaved.csv" --csv-separator "," --csv-img-key "image" --csv-caption-key "text" --imagenet-val "E:/Research/Images/ILSVRC2012/val" --warmup 1000 --batch-size 64 --lr 1e-6 --wd 0.1 --epochs 10 --workers 8 --zeroshot-frequency 1 --debug --model "ViT-L-14" --pretrained "datacomp_xl_s13b_b90k" --report-to tensorboard --log-every-n-steps 100 --save-most-recent --force-custom-text --lock-text --lock-text-freeze-layer-norm --lock-image --lock-image-unlocked-groups 2 --lock-image-freeze-bn-stats --train_subsample 0.1</CommandLineArguments>
+    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="docs\CLIP.png" />
+    <Content Include="docs\clip_loss.png" />
+    <Content Include="docs\clip_recall.png" />
+    <Content Include="docs\clip_val_loss.png" />
+    <Content Include="docs\clip_zeroshot.png" />
+    <Content Include="docs\effective_robustness.png" />
+    <Content Include="docs\laion2b_clip_zeroshot_b32.png" />
+    <Content Include="docs\laion_clip_zeroshot.png" />
+    <Content Include="docs\laion_clip_zeroshot_b16.png" />
+    <Content Include="docs\laion_clip_zeroshot_b16_plus_240.png" />
+    <Content Include="docs\laion_clip_zeroshot_l14.png" />
+    <Content Include="docs\laion_openai_compare_b32.jpg" />
+    <Content Include="docs\scaling.png" />
+    <Content Include="logs\2023_07_18-23_34_11-model_ViT-B-32-lr_1e-05-b_64-j_8-p_amp\params.txt" />
+    <Content Include="pytest.ini" />
+    <Content Include="requirements-test.txt" />
+    <Content Include="requirements-training.txt" />
+    <Content Include="requirements.txt" />
+    <Content Include="src\open_clip_torch.egg-info\dependency_links.txt" />
+    <Content Include="src\open_clip_torch.egg-info\requires.txt" />
+    <Content Include="src\open_clip_torch.egg-info\SOURCES.txt" />
+    <Content Include="src\open_clip_torch.egg-info\top_level.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="setup.py" />
+    <Compile Include="src\open_clip\coca_model.py" />
+    <Compile Include="src\open_clip\constants.py" />
+    <Compile Include="src\open_clip\factory.py" />
+    <Compile Include="src\open_clip\generation_utils.py" />
+    <Compile Include="src\open_clip\hf_configs.py" />
+    <Compile Include="src\open_clip\hf_model.py" />
+    <Compile Include="src\open_clip\loss.py" />
+    <Compile Include="src\open_clip\model.py" />
+    <Compile Include="src\open_clip\modified_resnet.py" />
+    <Compile Include="src\open_clip\openai.py" />
+    <Compile Include="src\open_clip\pretrained.py" />
+    <Compile Include="src\open_clip\push_to_hf_hub.py" />
+    <Compile Include="src\open_clip\timm_model.py" />
+    <Compile Include="src\open_clip\tokenizer.py" />
+    <Compile Include="src\open_clip\transform.py" />
+    <Compile Include="src\open_clip\transformer.py" />
+    <Compile Include="src\open_clip\utils.py" />
+    <Compile Include="src\open_clip\version.py" />
+    <Compile Include="src\open_clip\zero_shot_classifier.py" />
+    <Compile Include="src\open_clip\zero_shot_metadata.py" />
+    <Compile Include="src\open_clip\__init__.py" />
+    <Compile Include="src\training\data.py" />
+    <Compile Include="src\training\distributed.py" />
+    <Compile Include="src\training\file_utils.py" />
+    <Compile Include="src\training\logger.py" />
+    <Compile Include="src\training\main.py" />
+    <Compile Include="src\training\params.py" />
+    <Compile Include="src\training\precision.py" />
+    <Compile Include="src\training\profile.py" />
+    <Compile Include="src\training\scheduler.py" />
+    <Compile Include="src\training\train.py" />
+    <Compile Include="src\training\zero_shot.py" />
+    <Compile Include="src\training\__init__.py" />
+    <Compile Include="tests\test_download_pretrained.py" />
+    <Compile Include="tests\test_grit.py" />
+    <Compile Include="tests\test_hf_model.py" />
+    <Compile Include="tests\test_inference.py" />
+    <Compile Include="tests\test_inference_simple.py" />
+    <Compile Include="tests\test_laion.py" />
+    <Compile Include="tests\test_num_shards.py" />
+    <Compile Include="tests\test_spatial.py" />
+    <Compile Include="tests\test_spatial_open_flamingo.py" />
+    <Compile Include="tests\test_training_simple.py" />
+    <Compile Include="tests\test_wds.py" />
+    <Compile Include="tests\util_test.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="docs" />
+    <Folder Include="logs\" />
+    <Folder Include="logs\2023_07_18-23_34_11-model_ViT-B-32-lr_1e-05-b_64-j_8-p_amp" />
+    <Folder Include="src\" />
+    <Folder Include="src\open_clip" />
+    <Folder Include="src\open_clip_torch.egg-info" />
+    <Folder Include="src\training" />
+    <Folder Include="tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <InterpreterReference Include="Global|VisualStudio|open_clip" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>

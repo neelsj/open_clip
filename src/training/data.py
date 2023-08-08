@@ -33,18 +33,23 @@ class CsvDataset(Dataset):
 
         self.images = df[img_key].tolist()
         self.captions = df[caption_key].tolist()
+        self.captions_extra = [df[key].tolist() for key in df.columns[1:]]
+
         self.transforms = transforms
         logging.debug('Done loading data.')
 
         self.tokenize = tokenizer
 
+        self.dir = os.path.dirname(input_filename)
+
     def __len__(self):
         return len(self.captions)
 
     def __getitem__(self, idx):
-        images = self.transforms(Image.open(str(self.images[idx])))
+        images = self.transforms(Image.open(str(os.path.join(self.dir, self.images[idx])).replace("\\","/")))
         texts = self.tokenize([str(self.captions[idx])])[0]
-        return images, texts
+        texts_extra = self.tokenize([captions_extra[idx] for captions_extra in self.captions_extra])
+        return images, texts, texts_extra
 
 
 class SharedEpoch:
@@ -454,12 +459,18 @@ def get_csv_dataset(args, preprocess_fn, is_train, epoch=0, tokenizer=None):
         tokenizer=tokenizer
     )
     num_samples = len(dataset)
-    sampler = DistributedSampler(dataset) if args.distributed and is_train else None
-    shuffle = is_train and sampler is None
+
+    if (is_train and args.train_subsample):
+        num_samples=int(num_samples*args.train_subsample)
+        sampler = torch.utils.data.RandomSampler(dataset, num_samples=num_samples)
+        shuffle = False
+    else:
+        sampler = DistributedSampler(dataset) if args.distributed and is_train else None
+        shuffle = is_train and sampler is None
 
     dataloader = DataLoader(
         dataset,
-        batch_size=args.batch_size,
+        batch_size=args.batch_size if is_train else args.batch_size*16,
         shuffle=shuffle,
         num_workers=args.workers,
         pin_memory=True,
