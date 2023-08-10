@@ -99,7 +99,7 @@ class ClipLoss(nn.Module):
             labels = self.labels[device]
         return labels
 
-    def get_logits(self, image_features, text_features, logit_scale):
+    def get_logits(self, image_features, text_features, text_extra_features, logit_scale):
         if self.world_size > 1:
             all_image_features, all_text_features = gather_features(
                 image_features, text_features,
@@ -114,19 +114,28 @@ class ClipLoss(nn.Module):
         else:
             logits_per_image = logit_scale * image_features @ text_features.T
             logits_per_text = logit_scale * text_features @ image_features.T
-        
-        return logits_per_image, logits_per_text
 
-    def forward(self, image_features, text_features, logit_scale, output_dict=False):
+            logits_per_image_extra = torch.squeeze(torch.bmm(torch.unsqueeze(image_features, 1), torch.permute(text_extra_features, (0, 2, 1))))
+            logits_per_text_extra = torch.squeeze(torch.bmm(torch.unsqueeze(text_features, 1), torch.permute(text_extra_features, (0, 2, 1))))
+
+        return logits_per_image, logits_per_text, logits_per_image_extra, logits_per_text_extra
+
+    def forward(self, image_features, text_features, text_extra_features, logit_scale, output_dict=False):
         device = image_features.device
-        logits_per_image, logits_per_text = self.get_logits(image_features, text_features, logit_scale)
+        logits_per_image, logits_per_text, logits_per_image_extra, logits_per_text_extra = self.get_logits(image_features, text_features, text_extra_features, logit_scale)
 
         labels = self.get_ground_truth(device, logits_per_image.shape[0])
+       
+        logits_per_image_extra = F.log_softmax(logits_per_image_extra, dim=1, dtype=logits_per_image.dtype)
+        logits_per_text_extra = F.log_softmax(logits_per_text_extra, dim=1, dtype=logits_per_image.dtype)
 
-        total_loss = (
-            F.cross_entropy(logits_per_image, labels) +
-            F.cross_entropy(logits_per_text, labels)
-        ) / 2
+        labels_extra = 0.5*torch.ones(logits_per_image_extra.shape[0], logits_per_image_extra.shape[1], device=device, dtype=logits_per_image_extra.dtype)
+        labels_extra[:,0] = 1
+
+        labels_extra = F.softmax(labels_extra, dim=1, dtype=labels_extra.dtype)
+
+        total_loss = ((F.cross_entropy(logits_per_image, labels) + F.cross_entropy(logits_per_text, labels)) / 2 +
+            (F.kl_div(logits_per_image_extra, labels_extra, reduction = 'batchmean') + F.kl_div(logits_per_text_extra, labels_extra, reduction = 'batchmean')) / 2)            
 
         return {"contrastive_loss": total_loss} if output_dict else total_loss
 

@@ -24,7 +24,7 @@ from timeit import default_timer as timer
 
 useGPT4 = False
 
-usePairs = True
+usePairs = False
 
 if (usePairs):
     relations = ["left", "right", "above", "below"]  
@@ -61,7 +61,7 @@ def getOpenFlamingo():
     import open_flamingo
     from huggingface_hub import hf_hub_download
 
-    clip_vision_encoder_pretrained = "E:/Source/open_clip/logs/2023_08_03-00_12_31-model_ViT-L-14-lr_0.0001-b_16-j_8-p_amp\checkpoints/epoch_latest.pt"
+    clip_vision_encoder_pretrained = "E:/Source/open_clip/logs/2023_08_08-22_48_12-model_ViT-L-14-lr_0.0001-b_64-j_8-p_amp/checkpoints/epoch_latest.pt"
     #clip_vision_encoder_pretrained = "datacomp_xl_s13b_b90k"
 
     model, image_processor, tokenizer = open_flamingo.create_model_and_transforms(
@@ -236,25 +236,26 @@ def test_spatial():
 
     images = list(set(images))
 
-    out_path = os.path.join(path, 'val_results_gpt.csv' if useGPT4 else 'val_results_of.csv')
+    #out_path = os.path.join(path, 'val_results_gpt.csv' if useGPT4 else 'val_results_of.csv')
 
-    if (os.path.exists(out_path)):
-        preds = []
-        questions_answers = []
+    #if (os.path.exists(out_path)):
+    #    preds = []
+    #    questions_answers = []
 
-        with open(out_path, newline='') as csvfile: 
-            reader = csv.reader(csvfile)
-            for row in reader:
-                image = row[0]
-                query_text = row[1]
-                answer_text = row[2]
-                pred = row[3]
+    #    with open(out_path, newline='') as csvfile: 
+    #        reader = csv.reader(csvfile)
+    #        for row in reader:
+    #            image = row[0]
+    #            query_text = row[1]
+    #            answer_text = row[2]
+    #            pred = row[3]
 
-                preds.append(pred)
-                questions_answers.append([image, query_text, answer_text, pred])
-    else:
-        preds = []
-        questions_answers = []
+    #            preds.append(pred)
+    #            questions_answers.append([image, query_text, answer_text, pred])
+    #else:
+
+    preds = []
+    questions_answers = []
 
     start_row = int(len(preds))
 
@@ -280,7 +281,8 @@ def test_spatial():
 
             image_path = os.path.join(path, image).replace("\\","/")
             query_image = Image.open(image_path)
-                
+            query_image.show()
+
             if (useGPT4):
                 query_text = create_prompts(a, b, relation, options=True)
                 answer_text = generate_text_gpt(headers, endpoint, query_image, query_text)    

@@ -302,13 +302,24 @@ class CustomTextCLIP(nn.Module):
             self,
             image: Optional[torch.Tensor] = None,
             text: Optional[torch.Tensor] = None,
+            text_extra: Optional[torch.Tensor] = None,
     ):
         image_features = self.encode_image(image, normalize=True) if image is not None else None
         text_features = self.encode_text(text, normalize=True) if text is not None else None
+
+        if (text_extra is not None):
+            b, n, l = text_extra.shape
+            text_extra = torch.reshape(text_extra, (b*n, l))
+            text_extra_features = self.encode_text(text_extra, normalize=True)
+            text_extra_features = torch.reshape(text_extra_features, (b, n, text_extra_features.shape[1]))
+        else:
+            text_extra_features = None
+
         if self.output_dict:
             return {
                 "image_features": image_features,
                 "text_features": text_features,
+                "text_extra_features": text_extra_features,
                 "logit_scale": self.logit_scale.exp()
             }
         return image_features, text_features, self.logit_scale.exp()

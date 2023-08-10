@@ -155,7 +155,7 @@ def test_spatial(arch, pretrained):
 if __name__ == "__main__":
 
     arch = "ViT-L-14"
-    #pretrained = "E:/Source/open_clip/logs/2023_08_04-11_55_43-model_ViT-L-14-lr_0.0001-b_64-j_8-p_amp/checkpoints/epoch_latest.pt"
-    pretrained = 'laion2b_s32b_b82k'
+    pretrained = "E:/Source/open_clip/logs/2023_08_09-17_49_22-model_ViT-L-14-lr_0.0001-b_64-j_8-p_amp/checkpoints/epoch_latest.pt"
+    #pretrained = 'laion2b_s32b_b82k'
 
     test_spatial(arch, pretrained)
