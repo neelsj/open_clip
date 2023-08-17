@@ -77,6 +77,7 @@
     <Compile Include="src\training\precision.py" />
     <Compile Include="src\training\profile.py" />
     <Compile Include="src\training\scheduler.py" />
+    <Compile Include="src\training\spatial_eval.py" />
     <Compile Include="src\training\train.py" />
     <Compile Include="src\training\zero_shot.py" />
     <Compile Include="src\training\__init__.py" />
