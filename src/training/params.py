@@ -102,6 +102,12 @@ def parse_args(args):
         help="Path to imagenet v2 for conducting zero shot evaluation.",
     )
     parser.add_argument(
+        "--test-spatial",
+        type=str,
+        default=None,
+        help="Path to spatial data for conducting zero shot evaluation.",
+    )
+    parser.add_argument(
         "--logs",
         type=str,
         default="./logs/",

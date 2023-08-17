@@ -62,7 +62,7 @@ def getOpenFlamingo():
     from huggingface_hub import hf_hub_download
 
     clip_vision_encoder_pretrained = "E:/Source/open_clip/logs/2023_08_08-22_48_12-model_ViT-L-14-lr_0.0001-b_64-j_8-p_amp/checkpoints/epoch_latest.pt"
-    #clip_vision_encoder_pretrained = "datacomp_xl_s13b_b90k"
+    #clip_vision_encoder_pretrained = "laion2b_s32b_b82k"
 
     model, image_processor, tokenizer = open_flamingo.create_model_and_transforms(
         clip_vision_encoder_path = "ViT-L-14",

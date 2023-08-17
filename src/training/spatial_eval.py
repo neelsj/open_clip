@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 import random
 
-
+import logging
 
 def get_article(a):
     if (a[0] in ("a", "e", "i", "o", "u")):
@@ -60,17 +60,23 @@ def create_prompts(a, b, relation, background=None, allFour=True):
 
     return prompts
 
-def test_spatial(arch, pretrained):
+def test_spatial(model, preprocess, epoch, args):
     # Load the model
+
+    if (test_spatial is None):
+         return {}       
+    if args.zeroshot_frequency == 0:
+        return {}
+    if (epoch % args.zeroshot_frequency) != 0 and epoch != args.epochs:
+        return {}
+
+    tokenizer = open_clip.get_tokenizer(args.model)
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    batchSize = 512
+    batchSize = args.batch_size
 
-    model, _, preprocess = open_clip.create_model_and_transforms(arch, pretrained=pretrained)
-    tokenizer = open_clip.get_tokenizer(arch)
-    model.to(device)
-
-    path = "e:/Source/EffortlessCVSystem/Data/coco_spatial_pair_backgrounds_finetune"
+    path = args.test_spatial
 
     rows = []
     with open(os.path.join(path, 'val.csv'), newline='') as csvfile: 
@@ -80,7 +86,7 @@ def test_spatial(arch, pretrained):
 
     #rows = random.sample(rows[1:], 2048)
 
-    print("num samples %d" % len(rows))
+    logging.info("Spatial testing num samples %d" % len(rows))
 
     image_features = np.zeros((len(rows), 768))
 
@@ -92,7 +98,7 @@ def test_spatial(arch, pretrained):
 
         for j in range(num):
             row = rows[i+j]
-            image = os.path.join(path, row[0])
+            image = os.path.join(path, row[0]).replace("\\", "/")
 
             image = preprocess(Image.open(image)).unsqueeze(0).to(device)
             images.append(image)
@@ -145,12 +151,18 @@ def test_spatial(arch, pretrained):
             
             counts_spatial[relation] += 1
 
-    print("Accuracy %f" % np.mean(probs))
+    results = {}
+
+    logging.info("Spatial testing accuracy %f" % np.mean(probs))
+    results['spatial-testing-accuracy'] = np.mean(probs)
 
     for relation in ["above", "below", "left", "right"]:
-        print("Accuracy %s %f" % (relation, np.mean(probs_spatial[relation])))
+        logging.info("Spatial testing accuracy %s %f" % (relation, np.mean(probs_spatial[relation])))
+        results['spatial-testing-accuracy-%s' % relation] = np.mean(probs_spatial[relation])
 
-    print(counts_spatial)
+    logging.info('Finished spatial testing.')
+
+    return results
 
 if __name__ == "__main__":
 

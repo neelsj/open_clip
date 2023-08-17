@@ -14,6 +14,8 @@ from datasets import load_dataset
 
 import re
 
+import numpy as np
+
 def count_words_rp():
     
     cnt = Counter()
@@ -52,7 +54,7 @@ def count_words(p):
     print("opening %s" % file)
 
     df = pd.read_parquet(file, engine='pyarrow', columns=['URL', 'TEXT'])
-    pd.read
+
     for index, row in tqdm(df.iterrows(), total=df.shape[0]):
         text = row["TEXT"]
 
@@ -100,6 +102,17 @@ def count_words(p):
 
 #most_common = cnt.most_common(50000)
 
+def KL(P,Q):
+
+     epsilon = 0.00001
+
+     # You may want to instead make copies to avoid changing the np arrays.
+     P = P/100+epsilon
+     Q = Q/100+epsilon
+
+     divergence = np.sum(P*np.log(P/Q))
+     return divergence
+
 if __name__ == '__main__':
 
     #pool_obj = multiprocessing.Pool(processes=8)
@@ -124,15 +137,59 @@ if __name__ == '__main__':
     #        try:
     #            writer.writerow([row[0], 100*row[1]/total_all])
     #        except:
-                #pass
+    #            pass
 
-    most_common, total_all = count_words_rp()
+    #most_common, total_all = count_words_rp()
 
-    with open('E:\Research\Images\LAION400M\most_common_10000_total_words_%d_rp.csv' % total_all, 'w', newline='') as csvfile:
+    #with open('E:\Research\Images\LAION400M\most_common_10000_total_words_%d_rp.csv' % total_all, 'w', newline='') as csvfile:
+    #    writer = csv.writer(csvfile, delimiter=',')
+
+    #    for row in most_common:
+    #        try:
+    #            writer.writerow([row[0], 100*row[1]/total_all])
+    #        except:
+    #            pass
+
+    counts = {}
+
+    with open('E:\Research\Images\LAION400M\most_common_10000_total_words_3751945539.csv', newline='') as csvfile:
+        reader = csv.reader(csvfile)
+
+        for row in reader:
+            counts[row[0]] = row[1]
+
+    counts_rp = {}
+
+    with open('E:\Research\Images\LAION400M\most_common_10000_total_words_848876189_rp.csv', newline='') as csvfile:
+        reader = csv.reader(csvfile)
+
+        for row in reader:
+            counts_rp[row[0]] = row[1]
+
+    all_keys = set(counts_rp.keys()) | set(counts.keys())
+
+    for key in all_keys:
+        if key not in counts:
+            counts[key] = 0
+        if key not in counts_rp:
+            counts_rp[key] = 0
+
+    P = []
+    Q = []
+
+    with open('E:\Research\Images\LAION400M\most_common_10000_total_words_merged.csv', 'w', newline='') as csvfile:
         writer = csv.writer(csvfile, delimiter=',')
 
-        for row in most_common:
-            try:
-                writer.writerow([row[0], 100*row[1]/total_all])
-            except:
-                pass
+        for key in all_keys:
+            row = [key, counts[key], counts_rp[key]]
+            writer.writerow(row)
+
+            P.append(float(counts[key]))
+            Q.append(float(counts_rp[key]))
+
+    P = np.asarray(P)
+    Q = np.asarray(Q)
+
+    kl = KL(P,Q)
+
+    print(kl)

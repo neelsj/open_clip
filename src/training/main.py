@@ -409,10 +409,13 @@ def main(args):
             from open_clip.utils import convert_int8_model_to_inference_mode
             convert_int8_model_to_inference_mode(model)
         # Evaluate.
-        evaluate(model, data, start_epoch, args, writer)
+        evaluate(model, data, preprocess_val, start_epoch, args, writer)
         return
 
     loss = create_loss(args)
+
+    #if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
+    #    evaluate(model, data, preprocess_val, start_epoch, args, writer)
 
     for epoch in range(start_epoch, args.epochs):
         if is_master(args):
@@ -452,7 +455,7 @@ def main(args):
                 os.replace(tmp_save_path, latest_save_path)
 
         if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
-            evaluate(model, data, completed_epoch, args, writer)
+            evaluate(model, data, preprocess_val, completed_epoch, args, writer)
 
     if args.wandb and is_master(args):
         wandb.finish()

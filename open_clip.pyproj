@@ -81,6 +81,7 @@
     <Compile Include="src\training\zero_shot.py" />
     <Compile Include="src\training\__init__.py" />
     <Compile Include="tests\test_download_pretrained.py" />
+    <Compile Include="tests\test_features.py" />
     <Compile Include="tests\test_grit.py" />
     <Compile Include="tests\test_hf_model.py" />
     <Compile Include="tests\test_inference.py" />

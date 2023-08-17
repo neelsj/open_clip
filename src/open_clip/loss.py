@@ -115,8 +115,8 @@ class ClipLoss(nn.Module):
             logits_per_image = logit_scale * image_features @ text_features.T
             logits_per_text = logit_scale * text_features @ image_features.T
 
-            logits_per_image_extra = torch.squeeze(torch.bmm(torch.unsqueeze(image_features, 1), torch.permute(text_extra_features, (0, 2, 1))))
-            logits_per_text_extra = torch.squeeze(torch.bmm(torch.unsqueeze(text_features, 1), torch.permute(text_extra_features, (0, 2, 1))))
+            logits_per_image_extra = logit_scale * torch.squeeze(torch.bmm(torch.unsqueeze(image_features, 1), torch.permute(text_extra_features, (0, 2, 1))))
+            logits_per_text_extra = logit_scale * torch.squeeze(torch.bmm(torch.unsqueeze(text_features, 1), torch.permute(text_extra_features, (0, 2, 1))))
 
         return logits_per_image, logits_per_text, logits_per_image_extra, logits_per_text_extra
 
@@ -124,21 +124,22 @@ class ClipLoss(nn.Module):
         device = image_features.device
         logits_per_image, logits_per_text, logits_per_image_extra, logits_per_text_extra = self.get_logits(image_features, text_features, text_extra_features, logit_scale)
 
-        labels = self.get_ground_truth(device, logits_per_image.shape[0])
-       
-        logits_per_image_extra = F.log_softmax(logits_per_image_extra, dim=1, dtype=logits_per_image.dtype)
-        logits_per_text_extra = F.log_softmax(logits_per_text_extra, dim=1, dtype=logits_per_image.dtype)
+        labels = self.get_ground_truth(device, logits_per_image.shape[0])      
+        labels_extra = torch.zeros(logits_per_image_extra.shape[0], device=device, dtype=torch.long)
 
-        labels_extra = 0.5*torch.ones(logits_per_image_extra.shape[0], logits_per_image_extra.shape[1], device=device, dtype=logits_per_image_extra.dtype)
-        labels_extra[:,0] = 1
+        clip_loss = (
+            F.cross_entropy(logits_per_image, labels) +
+            F.cross_entropy(logits_per_text, labels)
+        ) / 2
 
-        labels_extra = F.softmax(labels_extra, dim=1, dtype=labels_extra.dtype)
+        clip_spatial_loss = (
+            F.cross_entropy(logits_per_image_extra, labels_extra) +
+            F.cross_entropy(logits_per_text_extra, labels_extra)
+        ) / 2
 
-        total_loss = ((F.cross_entropy(logits_per_image, labels) + F.cross_entropy(logits_per_text, labels)) / 2 +
-            (F.kl_div(logits_per_image_extra, labels_extra, reduction = 'batchmean') + F.kl_div(logits_per_text_extra, labels_extra, reduction = 'batchmean')) / 2)            
+        total_loss = clip_loss + clip_spatial_loss
 
         return {"contrastive_loss": total_loss} if output_dict else total_loss
-
 
 class CoCaLoss(ClipLoss):
     def __init__(

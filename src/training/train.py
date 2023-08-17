@@ -18,7 +18,7 @@ from open_clip import get_input_dtype, CLIP, CustomTextCLIP
 from .distributed import is_master
 from .zero_shot import zero_shot_eval
 from .precision import get_autocast
-
+from .spatial_eval import test_spatial
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -234,12 +234,15 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
     # end for
 
 
-def evaluate(model, data, epoch, args, tb_writer=None):
+def evaluate(model, data, preprocess_val, epoch, args, tb_writer=None):
     metrics = {}
     if not is_master(args):
         return metrics
     device = torch.device(args.device)
     model.eval()
+
+    spatial_metrics = test_spatial(model, preprocess_val, epoch, args)
+    metrics.update(spatial_metrics)
 
     zero_shot_metrics = zero_shot_eval(model, data, epoch, args)
     metrics.update(zero_shot_metrics)
