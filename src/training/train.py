@@ -20,6 +20,8 @@ from .zero_shot import zero_shot_eval
 from .precision import get_autocast
 from .spatial_eval import test_spatial
 
+from tqdm import tqdm
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
@@ -58,6 +60,12 @@ def backward(total_loss, scaler):
     else:
         total_loss.backward()
 
+def test_dataload(data):
+
+    dataloader = data['train'].dataloader
+
+    for _ in tqdm(dataloader):
+        pass
 
 def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=None):
     device = torch.device(args.device)

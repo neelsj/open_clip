@@ -33,7 +33,7 @@ from training.distributed import is_master, init_distributed_device, broadcast_o
 from training.logger import setup_logging
 from training.params import parse_args
 from training.scheduler import cosine_lr, const_lr, const_lr_cooldown
-from training.train import train_one_epoch, evaluate
+from training.train import train_one_epoch, evaluate, test_dataload
 from training.file_utils import pt_load, check_exists, start_sync_process, remote_sync
 
 
@@ -350,6 +350,10 @@ def main(args):
     # initialize datasets
     data = get_data(args, (preprocess_train, preprocess_val), epoch=start_epoch, tokenizer=get_tokenizer(args.model))
     assert len(data), 'At least one train or eval dataset must be specified.'
+
+    if (args.test_dataload):
+        test_dataload(data)
+        return
 
     # create scheduler if train
     scheduler = None
