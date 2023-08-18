@@ -66,7 +66,11 @@ class CsvDatasetExtra(Dataset):
         return len(self.captions)
 
     def __getitem__(self, idx):
-        images = self.transforms(Image.open(str(os.path.join(self.dir, self.images[idx])).replace("\\","/")))
+        try:
+            images = self.transforms(Image.open(str(os.path.join(self.dir, self.images[idx])).replace("\\","/")))
+        except:
+            images = self.transforms(Image.open(str(os.path.join(self.dir, self.images[idx])).replace("\\","/")))
+
         texts = self.tokenize([str(self.captions[idx])])[0]
         texts_extra = self.tokenize([captions_extra[idx] for captions_extra in self.captions_extra])
         return images, texts, texts_extra
