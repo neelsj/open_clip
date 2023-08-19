@@ -5,6 +5,7 @@ import math
 import os
 import random
 import sys
+import time
 import braceexpand
 from dataclasses import dataclass
 from multiprocessing import Value
@@ -69,6 +70,7 @@ class CsvDatasetExtra(Dataset):
         try:
             images = self.transforms(Image.open(str(os.path.join(self.dir, self.images[idx])).replace("\\","/")))
         except:
+            time.sleep(1)
             images = self.transforms(Image.open(str(os.path.join(self.dir, self.images[idx])).replace("\\","/")))
 
         texts = self.tokenize([str(self.captions[idx])])[0]
