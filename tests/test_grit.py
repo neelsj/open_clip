@@ -77,19 +77,19 @@ def get_relation_text(grid_x, grid_y):
     if (grid_x == 0 and grid_y == 0):
         return "top-left"
     elif (grid_x == 1 and grid_y == 0):
-        return "top"
+        return "top-center"
     elif (grid_x == 2 and grid_y == 0):
         return "top-right"
     elif (grid_x == 0 and grid_y == 1):
-        return "left"
+        return "middle-left"
     elif (grid_x == 1 and grid_y == 1):
         return "middle-center"
     elif (grid_x == 2 and grid_y == 1):
-        return "right"
+        return "middle-right"
     elif (grid_x == 0 and grid_y == 2):
         return "bottom-left"
     elif (grid_x == 1 and grid_y == 2):
-        return "bottom"
+        return "bottom-center"
     else: #if (grid_x == 2 and grid_y == 2):
         return "bottom-right"
 
@@ -97,24 +97,25 @@ def get_relation_phrase(grid_x, grid_y):
     return get_relation(get_relation_text(grid_x, grid_y))
 
 def get_relation_keep(grid_x, grid_y):
-    if (grid_x == 0 and grid_y == 0):
-        return False
-    elif (grid_x == 1 and grid_y == 0):
-        return True
-    elif (grid_x == 2 and grid_y == 0):
-        return False
-    elif (grid_x == 0 and grid_y == 1):
-        return True
-    elif (grid_x == 1 and grid_y == 1):
-        return False
-    elif (grid_x == 2 and grid_y == 1):
-        return True
-    elif (grid_x == 0 and grid_y == 2):
-        return False
-    elif (grid_x == 1 and grid_y == 2):
-        return True
-    else: #if (grid_x == 2 and grid_y == 2):
-        return False
+    return True
+    #if (grid_x == 0 and grid_y == 0):
+    #    return False
+    #elif (grid_x == 1 and grid_y == 0):
+    #    return True
+    #elif (grid_x == 2 and grid_y == 0):
+    #    return False
+    #elif (grid_x == 0 and grid_y == 1):
+    #    return True
+    #elif (grid_x == 1 and grid_y == 1):
+    #    return False
+    #elif (grid_x == 2 and grid_y == 1):
+    #    return True
+    #elif (grid_x == 0 and grid_y == 2):
+    #    return False
+    #elif (grid_x == 1 and grid_y == 2):
+    #    return True
+    #else: #if (grid_x == 2 and grid_y == 2):
+    #    return False
 
 grid_candidates = []
 grid_labels = []
@@ -277,7 +278,7 @@ def imshow(img, file_name = "tmp.jpg", caption='test'):
     plt.savefig(file_name, bbox_inches='tight')
     plt.close()
 
-def augment_caption_interleaved(json_obj, relations, variations=4): 
+def augment_caption_interleaved(json_obj, relations, variations=8): 
     caption = json_obj['caption']
 
     #grounding_list = json_obj['ref_exps']
@@ -616,5 +617,5 @@ if __name__ == '__main__':
     #data = parquet_to_csv(0)
     #data = download_from_csv(0)
     #folder_to_csv(0,0)
-    folder_to_csv(0,99)
-    analyze_csv(0,99)
+    folder_to_csv(0,9)
+    analyze_csv(0,9)
