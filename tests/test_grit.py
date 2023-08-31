@@ -64,6 +64,66 @@ deployment_name='text-davinci-003'
 #model = AutoModelForCausalLM.from_pretrained("togethercomputer/RedPajama-INCITE-Chat-3B-v1", torch_dtype=torch.float16)
 #model = model.to('cuda:0')
 
+def get_phrase(phrase):
+    if (phrase[-1] == "s"):
+        return phrase + " are "
+    else:
+        return phrase + " is "
+
+def get_relation(relation):
+    return "on the " + relation + " of the image"
+
+def get_relation_text(grid_x, grid_y):
+    if (grid_x == 0 and grid_y == 0):
+        return "top-left"
+    elif (grid_x == 1 and grid_y == 0):
+        return "top"
+    elif (grid_x == 2 and grid_y == 0):
+        return "top-right"
+    elif (grid_x == 0 and grid_y == 1):
+        return "left"
+    elif (grid_x == 1 and grid_y == 1):
+        return "middle-center"
+    elif (grid_x == 2 and grid_y == 1):
+        return "right"
+    elif (grid_x == 0 and grid_y == 2):
+        return "bottom-left"
+    elif (grid_x == 1 and grid_y == 2):
+        return "bottom"
+    else: #if (grid_x == 2 and grid_y == 2):
+        return "bottom-right"
+
+def get_relation_phrase(grid_x, grid_y):
+    return get_relation(get_relation_text(grid_x, grid_y))
+
+def get_relation_keep(grid_x, grid_y):
+    if (grid_x == 0 and grid_y == 0):
+        return False
+    elif (grid_x == 1 and grid_y == 0):
+        return True
+    elif (grid_x == 2 and grid_y == 0):
+        return False
+    elif (grid_x == 0 and grid_y == 1):
+        return True
+    elif (grid_x == 1 and grid_y == 1):
+        return False
+    elif (grid_x == 2 and grid_y == 1):
+        return True
+    elif (grid_x == 0 and grid_y == 2):
+        return False
+    elif (grid_x == 1 and grid_y == 2):
+        return True
+    else: #if (grid_x == 2 and grid_y == 2):
+        return False
+
+grid_candidates = []
+grid_labels = []
+for x in range(0,3):
+    for y in range(0,3):
+        if (get_relation_keep(x,y)):
+            grid_candidates.append((x, y))
+            grid_labels.append(get_relation_text(x,y))
+
 def download_images_from_parquet(p):
     file = 'E:\\Source\\GRIT\\grit-20m\\meta\\coyo_%d_snappy.parquet' % p
     output_folder = 'E:\\Source\\GRIT\\grit-20m\\tmp'
@@ -80,8 +140,12 @@ def download_images_from_parquet(p):
 
 def folder_to_csv(start, stop):
     pRange = range(start, stop+1)
-    out_path_csv = ('E:\\Source\\GRIT\\grit-20m\\images\\images_%04d_to_%04d_interleaved.csv' % (start, stop))
+    out_path_csv = ('E:\\Source\\GRIT\\grit-20m\\images\\images_%04d_to_%04d_interleaved_new.csv' % (start, stop))
     output_folder = 'E:\\Source\\GRIT\\grit-20m\\images\\'
+
+    relations = {}
+    for key in grid_labels:
+        relations[key] = 0
 
     with open(out_path_csv, 'w', newline='', encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile, delimiter=',')
@@ -97,11 +161,11 @@ def folder_to_csv(start, stop):
                 with open(file) as json_file:
                     json_obj = json.load(json_file)
 
-                    if ("Laura" in json_obj['caption']):
-                        g = 0
+                    #if ("Laura" in json_obj['caption']):
+                    #    g = 0
 
                     #augmented_caption_gpt, caption, augmented_caption = augment_caption(json_obj, output_folder, False)  
-                    augmented_captions = augment_caption_interleaved(json_obj)  
+                    augmented_captions = augment_caption_interleaved(json_obj, relations)  
 
                     #aug_caption = "A photo and a diagram are shown. In the photo, a paper towel is dipped into a bowl full of a red liquid sitting on a countertop. The red liquid is traveling up the lower part of the paper towel, and this section of the photo has a square drawn around it. A right-facing arrow leads from this square to the image. The image is square and has a background of two types of molecules, mixed together. The first type of molecule is composed of two bonded black spheres, one of which is single bonded to three white spheres and one of which is single bonded to two white spheres and a red sphere that is itself bonded to a white sphere. The other type of molecule is composed of six black spheres bonded together in a row and bonded to other red and white spheres. Six upward-facing arrows are drawn on top of this background. They have positive signs on their lower ends and negative signs on their heads. Four upward-facing arrows are drawn with their signs reversed. The red liquid is in the bottom left of the image, and a paper towel is on the left of the image, and Six upward-facing arrows are in the top right of the image."
                     #x = tokenizer.encode(aug_caption)
@@ -109,10 +173,18 @@ def folder_to_csv(start, stop):
                     #print(aug_caption + "\n\n")
                     #print(aug_caption_dec)
 
-                    image_file = file.replace(output_folder, "").replace("json","jpg")
+                    if (augmented_captions):
+                        image_file = file.replace(output_folder, "").replace("json","jpg")
 
-                    row = [image_file] + augmented_captions
-                    writer.writerow(row)
+                        row = [image_file] + augmented_captions
+                        writer.writerow(row)
+
+    total = 0    
+    for relation in relations.keys():
+        total += relations[relation]
+
+    for relation in relations.keys():
+        print("Labels distribution %s %f" % (relation, relations[relation]/total))
 
 def parquet_to_csv(p):
     file = 'E:\\Source\\GRIT\\grit-20m\\meta\\coyo_%d_snappy.parquet' % p
@@ -148,9 +220,6 @@ def download_from_csv(p):
         reader = csv.reader(csvfile)
         for row in tqdm(reader):
             images.append(row)
-
-            #if (len(images)>10):
-            #    break
 
     with ThreadPoolExecutor(max_workers = 20) as executor:
         results = list(tqdm(executor.map(download_image, images), total=len(images)))
@@ -207,40 +276,8 @@ def imshow(img, file_name = "tmp.jpg", caption='test'):
     ax.text(0.5, -0.2, '\n'.join(textwrap.wrap(caption, 120)), ha='center', transform=ax.transAxes, fontsize=18)
     plt.savefig(file_name, bbox_inches='tight')
     plt.close()
-    
-def get_phrase(phrase):
-    if (phrase[-1] == "s"):
-        return phrase + " are "
-    else:
-        return phrase + " is "
 
-def get_relation(relation, on=False):
-    if (on):
-        return "on the " + relation + " of the image"
-    else:
-        return "in the " + relation + " of the image"
-
-def get_relation_phrase(grid_x, grid_y):
-    if (grid_x == 0 and grid_y == 0):
-        return get_relation("top left")
-    elif (grid_x == 1 and grid_y == 0):
-        return  get_relation("top center")
-    elif (grid_x == 2 and grid_y == 0):
-        return get_relation("top right")
-    elif (grid_x == 0 and grid_y == 1):
-        return  get_relation("left", True)
-    elif (grid_x == 1 and grid_y == 1):
-        return  get_relation("center")
-    elif (grid_x == 2 and grid_y == 1):
-        return  get_relation("right", True)
-    elif (grid_x == 0 and grid_y == 2):
-        return  get_relation("bottom left")
-    elif (grid_x == 1 and grid_y == 2):
-        return get_relation("bottom center")
-    else: #if (grid_x == 2 and grid_y == 2):
-        return  get_relation("bottom right")
-
-def augment_caption_interleaved(json_obj, variations=8): 
+def augment_caption_interleaved(json_obj, relations, variations=4): 
     caption = json_obj['caption']
 
     #grounding_list = json_obj['ref_exps']
@@ -261,13 +298,10 @@ def augment_caption_interleaved(json_obj, variations=8):
         grid_x = int(center_x/.33)
         grid_y = int(center_y/.33)
 
-        candidates = []
-        for x in range(0,3):
-            for y in range(0,3):
-                if (grid_x != x or grid_y != y):
-                    candidates.append((x, y))
+        if (not get_relation_keep(grid_x, grid_y)):
+            return None
 
-        np.random.shuffle(candidates)
+        candidates = list(set(grid_candidates) - set([(grid_x, grid_y)]))
         candidates_all.append(candidates)
 
     for var in range(variations):
@@ -286,12 +320,21 @@ def augment_caption_interleaved(json_obj, variations=8):
             grid_x = int(center_x/.33)
             grid_y = int(center_y/.33)
 
+
+
             if (var != 0):
-                (grid_x_rand, grid_y_rand) = candidates_all[i][var-1]
+                (grid_x_rand, grid_y_rand) = candidates_all[i][np.random.randint(0,len(candidates_all[i]))]
    
                 augmented_caption += phrase_prefix + phrase + " (" + get_relation_phrase(grid_x_rand, grid_y_rand) + ") "
+
+                key = get_relation_text(grid_x_rand, grid_y_rand)
+                relations[key] += 1
+
             else:
                 augmented_caption += phrase_prefix + phrase + " (" + get_relation_phrase(grid_x, grid_y) + ") "
+
+                key = get_relation_text(grid_x, grid_y)
+                relations[key] += 1
 
             phrase_l = int(phrase_e)
 
@@ -495,10 +538,83 @@ def vis_image(json_obj, output_folder):
         # Out of (supported formats: eps, jpeg, jpg, pdf, pgf, png, ps, raw, rgba, svg, svgz, tif, tiff, webp)
         return 
     
+def analyze_csv(start, stop):
+
+    pRange = range(start, stop+1)
+    in_path_csv = ('E:\\Source\\GRIT\\grit-20m\\images\\images_%04d_to_%04d_interleaved_new.csv' % (start, stop))
+    out_path_csv =  in_path_csv.replace(".csv", "_bal.csv")
+
+    print("opening %s" % in_path_csv)
+
+    relations = {}
+    for key in grid_labels:
+        relations[key] = 0
+    
+    captions_relations_count = []
+
+    rows = []
+    with open(in_path_csv, newline='', encoding="utf-8") as csvfile: 
+        reader = csv.reader(csvfile)
+        header = next(reader)
+
+        for i, row in tqdm(enumerate(reader)):
+            
+            caption = row[1]
+            #caption = " ".join(row[1:])
+            label = []
+
+            caption_relations_count = {}
+
+            for key in relations.keys():
+                count = caption.count(key)
+                if (count):
+                    relations[key] += count
+                    caption_relations_count[key] = count
+                else:
+                    caption_relations_count[key] = 0
+
+            rows.append(row)    
+            captions_relations_count.append(caption_relations_count)
+
+    total = 0
+    for relation in relations.keys():
+        total += relations[relation]
+
+    relations_weights = {}
+    relations_weights_sum = 0
+
+    for relation in relations.keys():
+        print("Labels distribution %s %f" % (relation, relations[relation]/total))
+        relations_weights[relation] = 1/relations[relation]
+        relations_weights_sum += relations_weights[relation]
+
+    for relation in relations.keys():
+        relations_weights[relation] = relations_weights[relation]/relations_weights_sum
+
+    with open(out_path_csv, 'w', newline='', encoding="utf-8") as csvfile:
+        writer = csv.writer(csvfile, delimiter=',')
+
+        writer.writerow(header)
+
+        for i, row in tqdm(enumerate(rows)):
+
+            weight = 0
+            wc = 0
+
+            counts = captions_relations_count[i]
+            for relation in counts:
+                weight += relations_weights[relation]*(1 if counts[relation] > 0 else 0)
+                wc += (1 if counts[relation] > 0 else 0)
+
+            weight = weight/wc
+
+            writer.writerow(row + [weight])
+
 if __name__ == '__main__':
 
     #data = download_images_from_parquet(0)
     #data = parquet_to_csv(0)
     #data = download_from_csv(0)
-    folder_to_csv(0,9)
-    #folder_to_csv(10,99)
+    #folder_to_csv(0,0)
+    folder_to_csv(0,99)
+    analyze_csv(0,99)

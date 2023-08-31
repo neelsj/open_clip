@@ -135,7 +135,7 @@ def test_spatial(model, preprocess, epoch, args):
         relation = parts[2]
         background = parts[3]
 
-        prompts = create_prompts(a, b, relation, background)
+        prompts = create_prompts(a, b, relation)
         text = tokenizer(prompts).to(device)
 
         with torch.no_grad():
