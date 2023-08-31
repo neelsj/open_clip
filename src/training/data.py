@@ -49,15 +49,16 @@ class CsvDataset(Dataset):
 
 class CsvDatasetExtra(Dataset):
     def __init__(self, input_filename, transforms, img_key, caption_key, sep="\t", tokenizer=None):
-        logging.debug(f'Loading csv data from {input_filename}.')
+        logging.info(f'Loading csv data from {input_filename}.')
         df = pd.read_csv(input_filename, sep=sep)
 
         self.images = df[img_key].tolist()
         self.captions = df[caption_key].tolist()
-        self.captions_extra = [df[key].tolist() for key in df.columns[1:]]
+        self.captions_extra = [df[key].tolist() for key in df.columns[1:] if "text" in key]
+        self.weights = df["weight"].tolist() if "weight" == df.columns[-1] else None
 
         self.transforms = transforms
-        logging.debug('Done loading data.')
+        logging.info('Done loading data %d entries.' % len(self.images))
 
         self.tokenize = tokenizer
 
@@ -528,8 +529,13 @@ def get_csv_dataset_extra(args, preprocess_fn, is_train, epoch=0, tokenizer=None
         sampler = torch.utils.data.RandomSampler(dataset, num_samples=num_samples)
         shuffle = False
     else:
-        sampler = DistributedSampler(dataset) if args.distributed and is_train else None
-        shuffle = is_train and sampler is None
+        if (dataset.weights):
+            logging.info("Using weighted sampler")
+            sampler = torch.utils.data.WeightedRandomSampler(dataset.weights, num_samples=num_samples, replacement=True)
+            shuffle = False
+        else:
+            sampler = DistributedSampler(dataset) if args.distributed and is_train else None
+            shuffle = is_train and sampler is None
 
     dataloader = DataLoader(
         dataset,
