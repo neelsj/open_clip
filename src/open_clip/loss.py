@@ -137,7 +137,7 @@ class ClipLoss(nn.Module):
             F.cross_entropy(logits_per_text_extra, labels_extra)
         ) / 2
 
-        total_loss = clip_loss*.2 + clip_spatial_loss
+        total_loss = clip_loss*.01 + clip_spatial_loss
 
         return {"contrastive_loss": total_loss} if output_dict else total_loss
 
