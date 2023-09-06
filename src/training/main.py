@@ -418,8 +418,8 @@ def main(args):
 
     loss = create_loss(args)
 
-    #if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
-    #    evaluate(model, data, preprocess_val, start_epoch, args, writer)
+    if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
+        evaluate(model, data, preprocess_val, start_epoch, args, writer)
 
     for epoch in range(start_epoch, args.epochs):
         if is_master(args):

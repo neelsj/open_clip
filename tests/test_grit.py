@@ -556,7 +556,7 @@ def analyze_csv(start, stop):
     rows = []
     with open(in_path_csv, newline='', encoding="utf-8") as csvfile: 
         reader = csv.reader(csvfile)
-        header = next(reader)
+        #header = next(reader)
 
         for i, row in tqdm(enumerate(reader)):
             
@@ -595,7 +595,7 @@ def analyze_csv(start, stop):
     with open(out_path_csv, 'w', newline='', encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile, delimiter=',')
 
-        writer.writerow(header)
+        #writer.writerow(header)
 
         for i, row in tqdm(enumerate(rows)):
 
@@ -617,5 +617,5 @@ if __name__ == '__main__':
     #data = parquet_to_csv(0)
     #data = download_from_csv(0)
     #folder_to_csv(0,0)
-    folder_to_csv(0,9)
-    analyze_csv(0,9)
+    folder_to_csv(0,99)
+    analyze_csv(0,99)

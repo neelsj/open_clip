@@ -108,6 +108,12 @@ def parse_args(args):
         help="Path to spatial data for conducting zero shot evaluation.",
     )
     parser.add_argument(
+        "--test-spatial-single",
+        type=str,
+        default=None,
+        help="Path to spatial data for conducting zero shot evaluation.",
+    )
+    parser.add_argument(
         "--test-dataload",
         action="store_true",
         default=False,

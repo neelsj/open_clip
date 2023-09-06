@@ -18,7 +18,7 @@ from open_clip import get_input_dtype, CLIP, CustomTextCLIP
 from .distributed import is_master
 from .zero_shot import zero_shot_eval
 from .precision import get_autocast
-from .spatial_eval import test_spatial
+from .spatial_eval import test_spatial, test_spatial_single
 
 from tqdm import tqdm
 
@@ -251,6 +251,9 @@ def evaluate(model, data, preprocess_val, epoch, args, tb_writer=None):
 
     spatial_metrics = test_spatial(model, preprocess_val, epoch, args)
     metrics.update(spatial_metrics)
+
+    spatial_metrics_single = test_spatial_single(model, preprocess_val, epoch, args)
+    metrics.update(spatial_metrics_single)
 
     zero_shot_metrics = zero_shot_eval(model, data, epoch, args)
     metrics.update(zero_shot_metrics)
