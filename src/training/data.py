@@ -529,7 +529,7 @@ def get_csv_dataset_extra(args, preprocess_fn, is_train, epoch=0, tokenizer=None
         sampler = torch.utils.data.RandomSampler(dataset, num_samples=num_samples)
         shuffle = False
     else:
-        if (dataset.weights):
+        if (args.balanced_sampling and dataset.weights):
             logging.info("Using weighted sampler")
             sampler = torch.utils.data.WeightedRandomSampler(dataset.weights, num_samples=num_samples, replacement=True)
             shuffle = False

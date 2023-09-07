@@ -267,6 +267,9 @@ def test_spatial_single(model, preprocess, epoch, args):
         logging.info("Spatial testing accuracy %s %f" % (relation, np.mean(probs_spatial[relation])))
         results['spatial-testing-accuracy-%s' % relation] = np.mean(probs_spatial[relation])
 
+    #for relation in counts_spatial.keys():
+    #    logging.info("Spatial testing counts %s %f" % (relation,counts_spatial[relation]))
+
     logging.info('Finished spatial testing.')
 
     return results

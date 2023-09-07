@@ -120,6 +120,11 @@ def parse_args(args):
         help="Test data.",
     )
     parser.add_argument(
+        "--balanced-sampling",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--logs",
         type=str,
         default="./logs/",

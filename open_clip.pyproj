@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{24a0ad6f-c932-43b1-9269-7283f5cdb141}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>src\training\main.py</StartupFile>
+    <StartupFile>tests\test_grit.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
