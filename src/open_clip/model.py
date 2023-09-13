@@ -273,6 +273,8 @@ class CustomTextCLIP(nn.Module):
         super().__init__()
         self.output_dict = output_dict
         self.visual = _build_vision_tower(embed_dim, vision_cfg, quick_gelu, cast_dtype)
+        self.visual_spatial = _build_vision_tower(embed_dim, vision_cfg, quick_gelu, cast_dtype)
+        self.fusion = nn.Linear(2*768,768)
         self.text = _build_text_tower(embed_dim, text_cfg, quick_gelu, cast_dtype)
         self.context_length = self.text.context_length
         self.vocab_size = self.text.vocab_size
@@ -292,6 +294,11 @@ class CustomTextCLIP(nn.Module):
 
     def encode_image(self, image, normalize: bool = False):
         features = self.visual(image)
+        features_spatial = self.visual_spatial(image)
+
+        features = torch.cat((features, features_spatial), 1)
+        features = self.fusion(features)
+
         return F.normalize(features, dim=-1) if normalize else features
 
     def encode_text(self, text, normalize: bool = False):
