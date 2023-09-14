@@ -120,6 +120,7 @@ def create_model(
         cache_dir: Optional[str] = None,
         output_dict: Optional[bool] = None,
         require_pretrained: bool = False,
+        fuse_visual_spatial: bool = False
 ):
     has_hf_hub_prefix = model_name.startswith(HF_HUB_PREFIX)
     if has_hf_hub_prefix:
@@ -187,7 +188,7 @@ def create_model(
             if "coca" in model_name:
                 model = CoCa(**model_cfg, cast_dtype=cast_dtype)
             else:
-                model = CustomTextCLIP(**model_cfg, cast_dtype=cast_dtype)
+                model = CustomTextCLIP(**model_cfg, cast_dtype=cast_dtype, fuse_visual_spatial=fuse_visual_spatial)
         else:
             model = CLIP(**model_cfg, cast_dtype=cast_dtype)
 
@@ -304,6 +305,7 @@ def create_model_and_transforms(
         aug_cfg: Optional[Union[Dict[str, Any], AugmentationCfg]] = None,
         cache_dir: Optional[str] = None,
         output_dict: Optional[bool] = None,
+        fuse_visual_spatial: bool = False
 ):
     model = create_model(
         model_name,

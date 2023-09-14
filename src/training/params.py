@@ -125,6 +125,11 @@ def parse_args(args):
         default=False,
     )
     parser.add_argument(
+        "--fuse-visual-spatial",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--logs",
         type=str,
         default="./logs/",
