@@ -36,6 +36,9 @@ from training.scheduler import cosine_lr, const_lr, const_lr_cooldown
 from training.train import train_one_epoch, evaluate, test_dataload
 from training.file_utils import pt_load, check_exists, start_sync_process, remote_sync
 
+from open_clip.pretrained import get_pretrained_cfg, download_pretrained
+from open_clip.factory import load_state_dict
+from open_clip.model import convert_to_custom_text_state_dict, resize_pos_embed
 
 LATEST_CHECKPOINT_NAME = "epoch_latest.pt"
 
@@ -263,6 +266,11 @@ def main(args):
         model.lock_image_tower(
             unlocked_groups=args.lock_image_unlocked_groups,
             freeze_bn_stats=args.lock_image_freeze_bn_stats)
+    if (args.fuse_visual_spatial and args.lock_image_spatial):
+        # lock image tower as per LiT - https://arxiv.org/abs/2111.07991
+        model.lock_image_spatial_tower(
+            unlocked_groups=args.lock_image_spatial_unlocked_groups,
+            freeze_bn_stats=args.lock_image_spatial_freeze_bn_stats)
     if args.lock_text:
         model.lock_text_tower(
             unlocked_layers=args.lock_text_unlocked_layers,
@@ -334,10 +342,10 @@ def main(args):
         if 'epoch' in checkpoint:
             # resuming a train checkpoint w/ epoch and optimizer state
             start_epoch = checkpoint["epoch"]
-            sd = checkpoint["state_dict"]
-            if not args.distributed and next(iter(sd.items()))[0].startswith('module'):
-                sd = {k[len('module.'):]: v for k, v in sd.items()}
-            model.load_state_dict(sd)
+            state_dict_visual_spatial = checkpoint["state_dict"]
+            if not args.distributed and next(iter(state_dict_visual_spatial.items()))[0].startswith('module'):
+                state_dict_visual_spatial = {k[len('module.'):]: v for k, v in state_dict_visual_spatial.items()}
+            model.load_state_dict(state_dict_visual_spatial)
             if optimizer is not None:
                 optimizer.load_state_dict(checkpoint["optimizer"])
             if scaler is not None and 'scaler' in checkpoint:
@@ -347,6 +355,29 @@ def main(args):
             # loading a bare (model only) checkpoint for fine-tune or evaluation
             model.load_state_dict(checkpoint)
             logging.info(f"=> loaded checkpoint '{args.resume}' (epoch {start_epoch})")
+
+    if args.resume_visual_spatial is not None:
+
+        pretrained_cfg = get_pretrained_cfg(args.model, args.pretrained)
+        if pretrained_cfg:
+            checkpoint_path = download_pretrained(pretrained_cfg)
+        elif os.path.exists(args.pretrained):
+            checkpoint_path = args.pretrained
+
+        state_dict_pretrained = load_state_dict(checkpoint_path)
+        # detect old format and make compatible with new format
+        if 'positional_embedding' in state_dict_pretrained and not hasattr(model, 'positional_embedding'):
+            state_dict_pretrained = convert_to_custom_text_state_dict(state_dict_pretrained)
+        resize_pos_embed(state_dict_pretrained, model)    
+        
+        checkpoint = pt_load(args.resume_visual_spatial, map_location='cpu')
+        state_dict_visual_spatial = checkpoint["state_dict"]
+
+        for key in state_dict_visual_spatial.keys():
+            if ("visual" in key):
+                state_dict_pretrained[key.replace("visual", "visual_spatial")] = state_dict_visual_spatial[key]
+
+        incompatible_keys = model.load_state_dict(state_dict_pretrained, strict=False)
 
     # initialize datasets
     data = get_data(args, (preprocess_train, preprocess_val), epoch=start_epoch, tokenizer=get_tokenizer(args.model))

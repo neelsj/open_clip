@@ -219,6 +219,12 @@ def parse_args(args):
         help="path to latest checkpoint (default: none)",
     )
     parser.add_argument(
+        "--resume-visual-spatial",
+        default=None,
+        type=str,
+        help="path to latest checkpoint (default: none)",
+    )
+    parser.add_argument(
         "--precision",
         choices=["amp", "amp_bf16", "amp_bfloat16", "bf16", "fp16", "pure_bf16", "pure_fp16", "fp32"],
         default="amp",
@@ -256,6 +262,24 @@ def parse_args(args):
     )
     parser.add_argument(
         "--lock-image-freeze-bn-stats",
+        default=False,
+        action='store_true',
+        help="Freeze BatchNorm running stats in image tower for any locked layers.",
+    )
+    parser.add_argument(
+        "--lock-image-spatial",
+        default=False,
+        action='store_true',
+        help="Lock full image tower by disabling gradients.",
+    )
+    parser.add_argument(
+        "--lock-image-spatial-unlocked-groups",
+        type=int,
+        default=0,
+        help="Leave last n image tower layer groups unlocked.",
+    )
+    parser.add_argument(
+        "--lock-image-spatial-freeze-bn-stats",
         default=False,
         action='store_true',
         help="Freeze BatchNorm running stats in image tower for any locked layers.",

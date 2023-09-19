@@ -95,20 +95,13 @@ def load_state_dict(checkpoint_path: str, map_location='cpu'):
     return state_dict
 
 
-def load_checkpoint(model, checkpoint_path, strict=False, fuse_visual_spatial = False):
+def load_checkpoint(model, checkpoint_path, strict=False):
     state_dict = load_state_dict(checkpoint_path)
     # detect old format and make compatible with new format
     if 'positional_embedding' in state_dict and not hasattr(model, 'positional_embedding'):
         state_dict = convert_to_custom_text_state_dict(state_dict)
     resize_pos_embed(state_dict, model)
-
-    if (fuse_visual_spatial):
-        state_dict_new = state_dict.copy()
-        for key in state_dict.keys():
-            if ("visual" in key):
-                state_dict_new[key.replace("visual", "visual_spatial")] = state_dict[key]
-
-    incompatible_keys = model.load_state_dict(state_dict_new, strict=strict)
+    incompatible_keys = model.load_state_dict(state_dict, strict=strict)
     return incompatible_keys
 
 
@@ -233,7 +226,7 @@ def create_model(
 
             if checkpoint_path:
                 logging.info(f'Loading pretrained {model_name} weights ({pretrained}).')
-                load_checkpoint(model, checkpoint_path, fuse_visual_spatial=fuse_visual_spatial)
+                load_checkpoint(model, checkpoint_path)
             else:
                 error_str = (
                     f'Pretrained weights ({pretrained}) not found for model {model_name}.'

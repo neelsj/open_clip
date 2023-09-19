@@ -137,9 +137,10 @@ class ClipLoss(nn.Module):
             F.cross_entropy(logits_per_text_extra, labels_extra)
         ) / 2
 
-        total_loss = clip_loss*.01 + clip_spatial_loss
-
-        return {"contrastive_loss": total_loss} if output_dict else total_loss
+        if output_dict:
+            return {"contrastive_loss": clip_loss, "spatial_loss": clip_spatial_loss}
+        else:
+            return clip_loss, clip_spatial_loss
 
 class CoCaLoss(ClipLoss):
     def __init__(
