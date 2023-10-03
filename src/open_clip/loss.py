@@ -73,6 +73,7 @@ class ClipLoss(nn.Module):
             rank=0,
             world_size=1,
             use_horovod=False,
+            fuse_visual_spatial="visual"
     ):
         super().__init__()
         self.local_loss = local_loss
@@ -127,20 +128,31 @@ class ClipLoss(nn.Module):
         labels = self.get_ground_truth(device, logits_per_image.shape[0])      
         labels_extra = torch.zeros(logits_per_image_extra.shape[0], device=device, dtype=torch.long)
 
-        clip_loss = (
-            F.cross_entropy(logits_per_image, labels) +
-            F.cross_entropy(logits_per_text, labels)
-        ) / 2
-
-        clip_spatial_loss = (
-            F.cross_entropy(logits_per_image_extra, labels_extra) +
-            F.cross_entropy(logits_per_text_extra, labels_extra)
-        ) / 2
-
-        if output_dict:
-            return {"contrastive_loss": clip_loss, "spatial_loss": clip_spatial_loss}
+        if (self.fuse_visual_spatial == "visual"):
+            total_loss = (
+                F.cross_entropy(logits_per_image, labels) +
+                F.cross_entropy(logits_per_text, labels)
+            ) / 2
+            
+        elif (self.fuse_visual_spatial == "spatial"):
+            total_loss = (
+                F.cross_entropy(logits_per_image_extra, labels_extra) +
+                F.cross_entropy(logits_per_text_extra, labels_extra)
+            ) / 2   
         else:
-            return clip_loss, clip_spatial_loss
+            clip_loss = (
+                F.cross_entropy(logits_per_image, labels) +
+                F.cross_entropy(logits_per_text, labels)
+            ) / 2
+            
+            clip_spatial_loss = (
+                F.cross_entropy(logits_per_image_extra, labels_extra) +
+                F.cross_entropy(logits_per_text_extra, labels_extra)
+            ) / 2 
+            
+            total_loss = clip_loss + clip_spatial_loss
+
+        return {"contrastive_loss": total_loss} if output_dict else total_loss
 
 class CoCaLoss(ClipLoss):
     def __init__(

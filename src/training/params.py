@@ -126,8 +126,9 @@ def parse_args(args):
     )
     parser.add_argument(
         "--fuse-visual-spatial",
-        action="store_true",
-        default=False,
+        type=str,
+        choices=["visual", "spatial", "fuse-visual-spatial"]
+        default="visual",
     )
     parser.add_argument(
         "--logs",
@@ -267,19 +268,19 @@ def parse_args(args):
         help="Freeze BatchNorm running stats in image tower for any locked layers.",
     )
     parser.add_argument(
-        "--lock-image-spatial",
+        "--lock-spatial",
         default=False,
         action='store_true',
         help="Lock full image tower by disabling gradients.",
     )
     parser.add_argument(
-        "--lock-image-spatial-unlocked-groups",
+        "--lock-spatial-unlocked-groups",
         type=int,
         default=0,
         help="Leave last n image tower layer groups unlocked.",
     )
     parser.add_argument(
-        "--lock-image-spatial-freeze-bn-stats",
+        "--lock-spatial-freeze-bn-stats",
         default=False,
         action='store_true',
         help="Freeze BatchNorm running stats in image tower for any locked layers.",

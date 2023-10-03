@@ -266,11 +266,11 @@ def main(args):
         model.lock_image_tower(
             unlocked_groups=args.lock_image_unlocked_groups,
             freeze_bn_stats=args.lock_image_freeze_bn_stats)
-    if (args.fuse_visual_spatial and args.lock_image_spatial):
+    if (args.lock_spatial):
         # lock image tower as per LiT - https://arxiv.org/abs/2111.07991
-        model.lock_image_spatial_tower(
-            unlocked_groups=args.lock_image_spatial_unlocked_groups,
-            freeze_bn_stats=args.lock_image_spatial_freeze_bn_stats)
+        model.lock_spatial_tower(
+            unlocked_groups=args.lock_spatial_unlocked_groups,
+            freeze_bn_stats=args.lock_spatial_freeze_bn_stats)
     if args.lock_text:
         model.lock_text_tower(
             unlocked_layers=args.lock_text_unlocked_layers,

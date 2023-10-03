@@ -274,10 +274,10 @@ class CustomTextCLIP(nn.Module):
         super().__init__()
         self.output_dict = output_dict
         self.visual = _build_vision_tower(embed_dim, vision_cfg, quick_gelu, cast_dtype)
-
+        self.spatial = _build_vision_tower(embed_dim, vision_cfg, quick_gelu, cast_dtype)
+        
         self.fuse_visual_spatial = fuse_visual_spatial
-        if (self.fuse_visual_spatial):
-            self.visual_spatial = _build_vision_tower(embed_dim, vision_cfg, quick_gelu, cast_dtype)
+        if (self.fuse_visual_spatial == "fuse-visual-spatial"):
             self.fusion = nn.Linear(2*embed_dim,embed_dim)
 
         self.text = _build_text_tower(embed_dim, text_cfg, quick_gelu, cast_dtype)
@@ -289,10 +289,9 @@ class CustomTextCLIP(nn.Module):
         # lock image tower as per LiT - https://arxiv.org/abs/2111.07991
         self.visual.lock(unlocked_groups=unlocked_groups, freeze_bn_stats=freeze_bn_stats)
 
-    def lock_image_spatial_tower(self, unlocked_groups=0, freeze_bn_stats=False):
+    def lock_spatial_tower(self, unlocked_groups=0, freeze_bn_stats=False):
         # lock image tower as per LiT - https://arxiv.org/abs/2111.07991
-        if (self.fuse_visual_spatial):
-            self.visual_spatial.lock(unlocked_groups=unlocked_groups, freeze_bn_stats=freeze_bn_stats)
+        self.spatial.lock(unlocked_groups=unlocked_groups, freeze_bn_stats=freeze_bn_stats)
 
     def lock_text_tower(self, unlocked_layers: int = 0, freeze_layer_norm: bool = True):
         self.text.lock(unlocked_layers, freeze_layer_norm)
@@ -303,10 +302,16 @@ class CustomTextCLIP(nn.Module):
         self.text.set_grad_checkpointing(enable)
 
     def encode_image(self, image, normalize: bool = False):
-        features = self.visual(image)
-
-        if (self.fuse_visual_spatial):
-            features_spatial = self.visual_spatial(image)
+      
+        if (self.fuse_visual_spatial == "visual"):
+            features = self.visual(image)
+            
+        elif (self.fuse_visual_spatial == "spatial"):
+            features = self.spatial(image)        
+        else:
+            features = self.visual(image)
+            features_spatial = self.spatial(image)
+            
             features = torch.cat((features, features_spatial), 1)
             features = self.fusion(features)
 

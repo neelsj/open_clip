@@ -22,7 +22,7 @@ from io import BytesIO
 import time
 from timeit import default_timer as timer
 
-useGPT4 = False
+useGPT4 = True
 
 usePairs = False
 
@@ -53,8 +53,9 @@ def getGPT4():
     } 
 
     # Prepare endpoint, headers, and request body 
-    endpoint = f"{base_url}/rainbow?api-version=2023-03-15-preview" 
-
+    #endpoint = f"{base_url}/rainbow?api-version=2023-03-15-preview" 
+    endpoint = f"{base_url}/rainbow?api-version=2023-07-01-preview" 
+    
     return headers, endpoint
 
 def getOpenFlamingo():
