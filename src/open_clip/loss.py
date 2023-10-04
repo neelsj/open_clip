@@ -136,10 +136,17 @@ class ClipLoss(nn.Module):
             ) / 2
             
         elif (self.fuse_visual_spatial == "spatial"):
-            total_loss = (
+            clip_loss = (
+                F.cross_entropy(logits_per_image, labels) +
+                F.cross_entropy(logits_per_text, labels)
+            ) / 2
+            
+            clip_spatial_loss = (
                 F.cross_entropy(logits_per_image_extra, labels_extra) +
                 F.cross_entropy(logits_per_text_extra, labels_extra)
-            ) / 2   
+            ) / 2 
+            
+            total_loss = clip_loss*.2 + clip_spatial_loss
         else:
             clip_loss = (
                 F.cross_entropy(logits_per_image, labels) +
