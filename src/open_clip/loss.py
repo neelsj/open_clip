@@ -82,7 +82,8 @@ class ClipLoss(nn.Module):
         self.rank = rank
         self.world_size = world_size
         self.use_horovod = use_horovod
-
+        self.fuse_visual_spatial = fuse_visual_spatial
+        
         # cache state
         self.prev_num_logits = 0
         self.labels = {}

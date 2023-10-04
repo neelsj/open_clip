@@ -127,7 +127,7 @@ def parse_args(args):
     parser.add_argument(
         "--fuse-visual-spatial",
         type=str,
-        choices=["visual", "spatial", "fuse-visual-spatial"]
+        choices=["visual", "spatial", "fuse-visual-spatial"],
         default="visual",
     )
     parser.add_argument(

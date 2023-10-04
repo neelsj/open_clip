@@ -101,9 +101,15 @@ def load_checkpoint(model, checkpoint_path, strict=False):
     if 'positional_embedding' in state_dict and not hasattr(model, 'positional_embedding'):
         state_dict = convert_to_custom_text_state_dict(state_dict)
     resize_pos_embed(state_dict, model)
+
+    keys = list(state_dict.keys())
+
+    for key in keys:
+        if ("visual" in key):
+            state_dict[key.replace("visual", "spatial")] = state_dict[key]
+
     incompatible_keys = model.load_state_dict(state_dict, strict=strict)
     return incompatible_keys
-
 
 def create_model(
         model_name: str,
