@@ -91,7 +91,7 @@ def test_spatial(model, preprocess, epoch, args):
 
     logging.info("Spatial testing num samples %d" % len(rows))
 
-    image_features = np.zeros((len(rows), 640))
+    image_features = np.zeros((len(rows), model.spatial.output_dim))
 
     for i in tqdm(range(0, len(rows), batchSize)):
 
@@ -195,7 +195,7 @@ def test_spatial_single(model, preprocess, epoch, args):
 
     logging.info("Spatial testing num samples %d" % len(rows))
 
-    image_features = np.zeros((len(rows), 640))
+    image_features = np.zeros((len(rows), model.spatial.output_dim))
 
     for i in tqdm(range(0, len(rows), batchSize)):
 
