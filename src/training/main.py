@@ -243,6 +243,7 @@ def main(args):
             device=device,
             precision=args.precision,
             output_dict=True,
+            fuse_visual_spatial=args.dist_fuse_visual_spatial            
         )
     if args.use_bnb_linear is not None:
         print('=> using a layer from bitsandbytes.\n'
