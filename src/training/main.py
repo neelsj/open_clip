@@ -242,6 +242,7 @@ def main(args):
             args.distill_pretrained,
             device=device,
             precision=args.precision,
+            force_custom_text=args.force_custom_text,            
             output_dict=True,
             fuse_visual_spatial=args.dist_fuse_visual_spatial            
         )

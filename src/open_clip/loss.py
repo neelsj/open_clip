@@ -212,11 +212,11 @@ class DistillClipLoss(ClipLoss):
 
     def dist_loss(self, teacher_logits, student_logits):
         return -(teacher_logits.softmax(dim=1) * student_logits.log_softmax(dim=1)).sum(dim=1).mean(dim=0)
-
     def forward(
             self,
             image_features,
             text_features,
+            text_extra_features,
             logit_scale,
             dist_image_features,
             dist_text_features,
