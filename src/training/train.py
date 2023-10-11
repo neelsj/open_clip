@@ -110,7 +110,7 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
                 logit_scale = model_out["logit_scale"]
                 if args.distill:
                     with torch.no_grad():
-                        dist_model_out = dist_model(images, texts)
+                        dist_model_out = dist_model(images, texts, texts_extra)
                     model_out.update({f'dist_{k}' : v for k, v in dist_model_out.items()})
                 losses = loss(**model_out, output_dict=True)
 
