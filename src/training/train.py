@@ -106,7 +106,7 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
 
         if args.accum_freq == 1:
             with autocast():
-                model_out = model(images, texts, texts_extra)
+                model_out = model(images, texts)
                 logit_scale = model_out["logit_scale"]
                 if args.distill:
                     with torch.no_grad():
