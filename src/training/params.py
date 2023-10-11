@@ -339,6 +339,12 @@ def parse_args(args):
         help="Force use of CustomTextCLIP model (separate text-tower).",
     )
     parser.add_argument(
+        "--dist-force-custom-text",
+        default=False,
+        action='store_true',
+        help="Force use of CustomTextCLIP model (separate text-tower).",
+    )    
+    parser.add_argument(
         "--torchscript",
         default=False,
         action='store_true',
