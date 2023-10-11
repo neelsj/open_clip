@@ -117,9 +117,13 @@ class ClipLoss(nn.Module):
             logits_per_image = logit_scale * image_features @ text_features.T
             logits_per_text = logit_scale * text_features @ image_features.T
 
-            logits_per_image_extra = logit_scale * torch.squeeze(torch.bmm(torch.unsqueeze(image_features, 1), torch.permute(text_extra_features, (0, 2, 1))))
-            logits_per_text_extra = logit_scale * torch.squeeze(torch.bmm(torch.unsqueeze(text_features, 1), torch.permute(text_extra_features, (0, 2, 1))))
-
+            if (text_extra_features):
+                logits_per_image_extra = logit_scale * torch.squeeze(torch.bmm(torch.unsqueeze(image_features, 1), torch.permute(text_extra_features, (0, 2, 1))))
+                logits_per_text_extra = logit_scale * torch.squeeze(torch.bmm(torch.unsqueeze(text_features, 1), torch.permute(text_extra_features, (0, 2, 1))))
+            else:
+                logits_per_image_extra = None
+                logits_per_text_extra = None
+                
         return logits_per_image, logits_per_text, logits_per_image_extra, logits_per_text_extra
 
     def forward(self, image_features, text_features, text_extra_features, logit_scale, output_dict=False):
@@ -216,19 +220,17 @@ class DistillClipLoss(ClipLoss):
             self,
             image_features,
             text_features,
-            text_extra_features,
             logit_scale,
             dist_image_features,
-            dist_text_features,
-            dist_text_extra_features,            
+            dist_text_features,         
             dist_logit_scale,
             output_dict=False,
     ):
         logits_per_image, logits_per_text, _, _ = \
-            self.get_logits(image_features, text_features, text_extra_features, logit_scale)
+            self.get_logits(image_features, text_features, None, logit_scale)
 
         dist_logits_per_image, dist_logits_per_text, _, _ = \
-            self.get_logits(dist_image_features, dist_text_features, dist_text_extra_features, dist_logit_scale)
+            self.get_logits(dist_image_features, dist_text_features, None, dist_logit_scale)
 
         labels = self.get_ground_truth(image_features.device, logits_per_image.shape[0])
 
