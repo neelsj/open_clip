@@ -222,7 +222,8 @@ class DistillClipLoss(ClipLoss):
             text_features,
             logit_scale,
             dist_image_features,
-            dist_text_features,         
+            dist_text_features,
+            dist_text_extra_features,
             dist_logit_scale,
             output_dict=False,
     ):
