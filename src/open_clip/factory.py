@@ -104,9 +104,9 @@ def load_checkpoint(model, checkpoint_path, strict=False):
 
     keys = list(state_dict.keys())
 
-    for key in keys:
-        if ("visual" in key):
-            state_dict[key.replace("visual", "spatial")] = state_dict[key]
+    # for key in keys:
+    #     if ("visual" in key):
+    #         state_dict[key.replace("visual", "spatial")] = state_dict[key]
 
     incompatible_keys = model.load_state_dict(state_dict, strict=strict)
     return incompatible_keys
