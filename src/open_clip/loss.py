@@ -245,7 +245,7 @@ class DistillClipLoss(ClipLoss):
             self.dist_loss(dist_logits_per_text, logits_per_text)
         ) / 2
 
-        #distill_loss = F.mse(image_features, dist_text_features)
+        #distill_loss = F.mse_loss(image_features, dist_text_features)
 
         if output_dict:
             return {"distill_loss": distill_loss}
