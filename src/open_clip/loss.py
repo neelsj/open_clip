@@ -233,12 +233,12 @@ class DistillClipLoss(ClipLoss):
         dist_logits_per_image, dist_logits_per_text, _, _ = \
             self.get_logits(dist_image_features, dist_text_features, None, dist_logit_scale)
 
-        labels = self.get_ground_truth(image_features.device, logits_per_image.shape[0])
+        #labels = self.get_ground_truth(image_features.device, logits_per_image.shape[0])
 
-        contrastive_loss = (
-            F.cross_entropy(logits_per_image, labels) +
-            F.cross_entropy(logits_per_text, labels)
-        ) / 2
+        #contrastive_loss = (
+        #    F.cross_entropy(logits_per_image, labels) +
+        #    F.cross_entropy(logits_per_text, labels)
+        #) / 2
 
         distill_loss = (
             self.dist_loss(dist_logits_per_image, logits_per_image) +
@@ -246,6 +246,6 @@ class DistillClipLoss(ClipLoss):
         ) / 2
 
         if output_dict:
-            return {"contrastive_loss": contrastive_loss, "distill_loss": distill_loss}
+            return {"distill_loss": distill_loss}
 
-        return contrastive_loss, distill_loss
+        return distill_loss
