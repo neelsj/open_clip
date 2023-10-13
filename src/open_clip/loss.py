@@ -245,7 +245,8 @@ class DistillClipLoss(ClipLoss):
         #     self.dist_loss(dist_logits_per_text, logits_per_text)
         # ) / 2
 
-        distill_loss = 1 - F.cosine_similarity(image_features, dist_image_features)
+        y = torch.ones(image_features.shape[0], device=torch.device("cuda"))
+        distill_loss = F.cosine_embedding_loss(image_features, dist_image_features, y)
 
         if output_dict:
             return {"distill_loss": distill_loss}
