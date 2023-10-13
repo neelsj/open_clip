@@ -245,7 +245,7 @@ class DistillClipLoss(ClipLoss):
         #     self.dist_loss(dist_logits_per_text, logits_per_text)
         # ) / 2
 
-        distill_loss = F.cosine_embedding_loss(image_features, dist_image_features, torch.ones(image_features.shape[0], 1))
+        distill_loss = 1 - F.cosine_similarity(image_features, dist_image_features)
 
         if output_dict:
             return {"distill_loss": distill_loss}
