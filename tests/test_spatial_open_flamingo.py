@@ -22,7 +22,7 @@ from io import BytesIO
 import time
 from timeit import default_timer as timer
 
-useGPT4 = True
+useGPT4 = False
 
 usePairs = False
 
@@ -62,7 +62,7 @@ def getOpenFlamingo():
     import open_flamingo
     from huggingface_hub import hf_hub_download
 
-    clip_vision_encoder_pretrained = "E:/Source/open_clip/logs/2023_08_08-22_48_12-model_ViT-L-14-lr_0.0001-b_64-j_8-p_amp/checkpoints/epoch_latest.pt"
+    clip_vision_encoder_pretrained = "E:/Source/open_clip/logs/best_spatial_checkpoint/epoch_1.pt"
     #clip_vision_encoder_pretrained = "laion2b_s32b_b82k"
 
     model, image_processor, tokenizer = open_flamingo.create_model_and_transforms(
@@ -282,7 +282,7 @@ def test_spatial():
 
             image_path = os.path.join(path, image).replace("\\","/")
             query_image = Image.open(image_path)
-            query_image.show()
+            # query_image.show()
 
             if (useGPT4):
                 query_text = create_prompts(a, b, relation, options=True)
@@ -338,7 +338,7 @@ def test_spatial():
 
     print("Mean correct %f incorrect %f indetermined %f" % (correct/len(preds), incorrect/len(preds), indetermined/len(preds)))
 
-    out_path = os.path.join(path, 'val_results_gpt2.csv' if useGPT4 else 'val_results_of2.csv')
+    out_path = os.path.join(path, 'val_results_gpt.csv' if useGPT4 else 'val_results_of.csv')
 
     with open(out_path, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile, delimiter=',')
