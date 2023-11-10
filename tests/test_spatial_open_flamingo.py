@@ -282,7 +282,7 @@ def test_spatial():
 
             image_path = os.path.join(path, image).replace("\\","/")
             query_image = Image.open(image_path)
-            # query_image.show()
+            query_image.show()
 
             if (useGPT4):
                 query_text = create_prompts(a, b, relation, options=True)

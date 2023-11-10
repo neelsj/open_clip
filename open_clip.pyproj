@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{24a0ad6f-c932-43b1-9269-7283f5cdb141}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>tests\test_spatial_open_flamingo.py</StartupFile>
+    <StartupFile>tests\test_features.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -13,7 +13,7 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId>Global|VisualStudio|open_clip</InterpreterId>
     <IsWindowsApplication>False</IsWindowsApplication>
-    <CommandLineArguments>--dataset-type "csv_extra" --train-data "E:/Source/GRIT/grit-20m/images/images_0000_to_0009_interleaved_new.csv" --csv-separator "," --csv-img-key "image" --csv-caption-key "text" --imagenet-val "E:/Research/Images/ILSVRC2012/val" --warmup 1000 --batch-size 2 --lr 1e-4 --wd 0.1 --epochs 10 --workers 0 --zeroshot-frequency 1 --model "ViT-L-14" --pretrained "laion2b_s32b_b82k" --report-to tensorboard --log-every-n-steps 100 --save-most-recent --dist-force-custom-text --test-spatial-single "E:/Source/EffortlessCVSystem/Data/coco_spatial_single_backgrounds_finetune" --fuse-visual-spatial "visual" --dist-fuse-visual-spatial "fuse-visual-spatial" --distill-model ViT-L-14 --distill-pretrained "logs/best_fused/epoch_latest.pt"</CommandLineArguments>
+    <CommandLineArguments>--dataset-type "csv_extra" --imagenet-val "E:/Research/Images/ILSVRC2012/val" --batch-size 512 --workers 16 --model "ViT-L-14" --pretrained "E:/Source/open_clip/logs/best_spatial_checkpoint/epoch_1.pt" --test-spatial-single "E:/Source/EffortlessCVSystem/Data/coco_spatial_single_backgrounds_finetune" --zeroshot-frequency 1</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <SuppressConfigureTestFrameworkPrompt>true</SuppressConfigureTestFrameworkPrompt>
   </PropertyGroup>

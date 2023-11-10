@@ -275,7 +275,7 @@ def display(useOF):
     colors = []
     ss = []
 
-    bs = 4
+    bs = 2
 
     cmap = plt.colormaps['rainbow']
 
@@ -303,6 +303,9 @@ def display(useOF):
                  xytext=(0,10), # distance from text to points (x,y)
                  ha='center') 
 
+            # plt.xlim(-.5, .5)
+            # plt.ylim(-2.5, 1)
+
             for k in range(text_features.shape[0]):
                 x = text_features[k,i+j,0].tolist()
                 y = text_features[k,i+j,1].tolist()
@@ -329,6 +332,6 @@ if __name__ == "__main__":
     #compute_tsne(False)
     #compute_tsne(True)
 
-    #display(False)
+    display(False)
 
-    create_features_t5()
+    #create_features_t5()
