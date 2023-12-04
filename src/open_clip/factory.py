@@ -102,12 +102,6 @@ def load_checkpoint(model, checkpoint_path, strict=False):
         state_dict = convert_to_custom_text_state_dict(state_dict)
     resize_pos_embed(state_dict, model)
 
-    keys = list(state_dict.keys())
-
-    for key in keys:
-        if ("text.transformer" in key):
-            del state_dict[key]
-
     incompatible_keys = model.load_state_dict(state_dict, strict=strict)
     return incompatible_keys
 
@@ -251,8 +245,8 @@ def create_model(
                 f'Pretrained weights were required for (model: {model_name}, pretrained: {pretrained}) but not loaded.')
 
         # set image / mean metadata from pretrained_cfg if available, or use default
-        model.visual.image_mean = pretrained_cfg.get('mean', None) or OPENAI_DATASET_MEAN
-        model.visual.image_std = pretrained_cfg.get('std', None) or OPENAI_DATASET_STD
+        model.visual.image_mean = (0.5, 0.5, 0.5)
+        model.visual.image_std = (0.5, 0.5, 0.5)    
 
     if output_dict and hasattr(model, "output_dict"):
         model.output_dict = True

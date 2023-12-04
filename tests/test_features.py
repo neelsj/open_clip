@@ -81,7 +81,11 @@ def getOpenFlamingo():
 
     return model, image_processor, tokenizer 
 
-path = "E:/Source/GRIT/grit-20m/images/"
+#path = "E:/Source/GRIT/grit-20m/images/"
+#csv_file = "images_0000_to_0009_interleaved.csv"
+
+path = "E:/Source/EffortlessCVSystem/Data/coco_spatial_backgrounds"
+csv_file = "val.csv"
 
 def create_features_t5():
 
@@ -135,13 +139,14 @@ def create_features(useOF):
     # Load the data
 
     rows = []
-    with open(os.path.join(path, 'images_0000_to_0009_interleaved.csv'), newline='', encoding="utf8") as csvfile: 
+    with open(os.path.join(path, csv_file), newline='', encoding="utf8") as csvfile: 
         reader = csv.reader(csvfile)
         next(reader)
         for row in reader:
             rows.append(row)
-
-    rows = rows[0:10000]
+            
+    if (len(rows) > 15000):
+        rows = rows[0:15000]
 
     print("num samples %d" % len(rows))
     num_prompts = len(rows[0])-1
@@ -156,14 +161,20 @@ def create_features(useOF):
         batchSize = 256
 
     image_features = np.zeros((len(rows), 768))
-    text_features = np.zeros((num_prompts, len(rows), 768))
+
+    if (num_prompts>1):
+        text_features = np.zeros((num_prompts, len(rows), 768))
+    else:
+        text_features = np.zeros((len(rows), 768))
 
     for i in tqdm(range(0, len(rows), batchSize)):
 
         images_batch = []
         prompts_batch = []
-        for k in range(num_prompts):
-            prompts_batch.append([])
+        
+        if (num_prompts>1):        
+            for k in range(num_prompts):
+                prompts_batch.append([])
         
         num = min(batchSize, len(rows)-i)
 
@@ -174,9 +185,13 @@ def create_features(useOF):
             image = preprocess(Image.open(img_file)).unsqueeze(0).to(device)
             images_batch.append(image)
         
-            for k in range(num_prompts):
-                prompt = row[1+k]
-                prompts_batch[k].append(prompt)
+            if (num_prompts>1):  
+                for k in range(num_prompts):
+                    prompt = row[1+k]
+                    prompts_batch[k].append(prompt)
+            else:
+                prompt = row[1]
+                prompts_batch.append(prompt)
 
         images_batch = torch.cat(images_batch, dim=0)
 
@@ -190,16 +205,27 @@ def create_features(useOF):
         image_features[i:i+num,:] = image_feature.cpu().numpy()
 
         # Calculate features
-        for k in range(num_prompts):
+        if (num_prompts>1):
+            for k in range(num_prompts):
+                with torch.no_grad():
+                    texts = tokenizer(prompts_batch[k]).to(device)
+
+                    if useOF:
+                        text_feature  = model.lang_encoder(texts)
+                    else:
+                        text_feature = model.encode_text(texts)
+
+                text_features[k,i:i+num,:] = text_feature.cpu().numpy()
+        else:
             with torch.no_grad():
-                texts = tokenizer(prompts_batch[k])
+                texts = tokenizer(prompts_batch).to(device)
 
-            if useOF:
-                text_feature  = model.lang_encoder(images_batch)
-            else:
-                text_feature = model.encode_text(texts)
+                if useOF:
+                    text_feature  = model.lang_encoder(texts)
+                else:
+                    text_feature = model.encode_text(texts)
 
-            text_features[k,i:i+num,:] = text_feature.cpu().numpy()
+            text_features[i:i+num,:] = text_feature.cpu().numpy()
 
     if useOF:
         np.save(os.path.join(path, 'image_features_of.npy'), image_features)
@@ -218,9 +244,12 @@ def compute_tsne(useOF):
     else:
         image_features = np.load(os.path.join(path, 'image_features_clip.npy'))
         text_features = np.load(os.path.join(path, 'text_features_clip.npy'))
-
-    features = np.concatenate((image_features, text_features.reshape(text_features.shape[0]*text_features.shape[1], text_features.shape[2])))
-
+        
+    if (len(text_features.shape)>2):
+        features = np.concatenate((image_features, text_features.reshape(text_features.shape[0]*text_features.shape[1], text_features.shape[2])))
+    else:
+        features = np.concatenate((image_features, text_features))
+        
     print("pca")
 
     start = timer()    
@@ -239,9 +268,11 @@ def compute_tsne(useOF):
 
     print("tsne time %.02f mins" % ((end - start)/60))
 
-    image_features_tsne = features_tsne[0:len(image_features),:]
+    image_features_tsne = features_tsne[0:len(image_features),:] 
     text_features_tsne = features_tsne[len(image_features):,:]
-    text_features_tsne = text_features_tsne.reshape(text_features.shape[0], text_features.shape[1], text_features_tsne.shape[1])
+    
+    if (len(text_features.shape)>2):
+        text_features_tsne = text_features_tsne.reshape(text_features.shape[0], text_features.shape[1], text_features_tsne.shape[1])
 
     if useOF:
         np.save(os.path.join(path, 'image_features_of_tsne.npy'), image_features_tsne)
@@ -253,20 +284,21 @@ def compute_tsne(useOF):
 def display(useOF):
 
     rows = []
-    with open(os.path.join(path, 'images_0000_to_0009_interleaved.csv'), newline='', encoding="utf8") as csvfile: 
+    with open(os.path.join(path, csv_file), newline='', encoding="utf8") as csvfile: 
         reader = csv.reader(csvfile)
         next(reader)
         for row in reader:
             rows.append(row)
 
-    rows = rows[0:10000]
+    if (len(rows) > 15000):
+        rows = rows[0:15000]
 
     if useOF:
-        image_features = np.load(os.path.join(path, 'image_features_of.npy'))
-        text_features = np.load(os.path.join(path, 'text_features_of.npy'))
+        image_features = np.load(os.path.join(path, 'image_features_of_tsne.npy'))
+        text_features = np.load(os.path.join(path, 'text_features_of_tsne.npy'))
     else:
-        image_features = np.load(os.path.join(path, 'image_features_clip.npy'))
-        text_features = np.load(os.path.join(path, 'text_features_clip.npy'))
+        image_features = np.load(os.path.join(path, 'image_features_clip_tsne.npy'))
+        text_features = np.load(os.path.join(path, 'text_features_clip_tsne.npy'))
 
     df = pd.DataFrame()
 
@@ -275,15 +307,17 @@ def display(useOF):
     colors = []
     ss = []
 
-    bs = 2
+    bs = 4
 
     cmap = plt.colormaps['rainbow']
 
-    for i in range(0, image_features.shape[0], bs):
+    inds = [0, 1, 2, 3, 12000, 12001, 12002, 12003]
+
+    for i in [0]: #range(0, image_features.shape[0], bs):
 
         plt.clf()
 
-        for j in range(bs):
+        for j in inds:
             x = image_features[i+j,0].tolist()
             y = image_features[i+j,1].tolist()
 
@@ -300,38 +334,51 @@ def display(useOF):
             plt.annotate(label, # this is the text
                  (x,y), # these are the coordinates to position the label
                  textcoords="offset points", # how to position the text
-                 xytext=(0,10), # distance from text to points (x,y)
+                 xytext=(0,10+random.randint(0, 5)), # distance from text to points (x,y)
                  ha='center') 
 
             # plt.xlim(-.5, .5)
             # plt.ylim(-2.5, 1)
 
-            for k in range(text_features.shape[0]):
-                x = text_features[k,i+j,0].tolist()
-                y = text_features[k,i+j,1].tolist()
+            # if (len(text_features.shape)>2):
+            #     for k in range(text_features.shape[0]):
+            #         x = text_features[k,i+j,0].tolist()
+            #         y = text_features[k,i+j,1].tolist()
 
-                a = 1 - 0.5*k/text_features.shape[0]
-                s = (1 - 0.5*k/text_features.shape[0])*100
+            #         a = 1 - 0.5*k/text_features.shape[0]
+            #         s = (1 - 0.5*k/text_features.shape[0])*100
 
-                color = [r*a, g*a, b*a]
-                label = "t%d_%d" % (i+j, k)
-                print("%s: %s" % (label, rows[i+j][k+1]))
+            #         color = [r*a, g*a, b*a]
+            #         label = "t%d_%d" % (i+j, k)
+            #         print("%s: %s" % (label, rows[i+j][k+1]))
 
-                plt.scatter(x, y, c=color, s=s)
-                plt.annotate(label, # this is the text
-                (x,y), # these are the coordinates to position the label
-                textcoords="offset points", # how to position the text
-                xytext=(0,10), # distance from text to points (x,y)
-                ha='center') 
+            #         plt.scatter(x, y, c=color, s=s)
+            #         plt.annotate(label, # this is the text
+            #         (x,y), # these are the coordinates to position the label
+            #         textcoords="offset points", # how to position the text
+            #         xytext=(0,10+random.randint(0, 5)), # distance from text to points (x,y)
+            #         ha='center') 
+            # else:
+            #     x = text_features[i+j,0].tolist()
+            #     y = text_features[i+j,1].tolist()
+
+            #     color = [r, g, b]
+            #     label = "t%d" % (i+j)
+            #     print("%s: %s" % (label, rows[i+j][1]))
+
+            #     plt.scatter(x, y, c=color, s=100)
+            #     plt.annotate(label, # this is the text
+            #     (x,y), # these are the coordinates to position the label
+            #     textcoords="offset points", # how to position the text
+            #     xytext=(0,10+random.randint(0, 5)), # distance from text to points (x,y)
+            #     ha='center')                 
 
         plt.show()
 
 if __name__ == "__main__":
     #create_features(False)
-    #create_features(True)
+    create_features(True)
     #compute_tsne(False)
     #compute_tsne(True)
-
-    display(False)
-
-    #create_features_t5()
+    
+    #display(False)
