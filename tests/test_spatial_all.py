@@ -1,6 +1,9 @@
 import torch
+from torch._dynamo.utils import ifdyn
+import torchvision
+import torchvision.transforms as T
 from PIL import Image
-#import open_clip
+import open_clip
 
 import os
 import csv
@@ -10,9 +13,10 @@ from tqdm import tqdm, trange
 
 import random
 
-import torch
 from PIL import Image
 import requests
+
+import cv2
 
 import json
 
@@ -22,21 +26,107 @@ from io import BytesIO
 import time
 from timeit import default_timer as timer
 
-model_type = "GPT"
-#model_type = "OF"
-#model_type = "LLAVA"
-#model_type = "PSI2V"
+import matplotlib.pyplot as plt 
 
-usePairs = False
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-if (usePairs):
-    relations = ["left", "right", "above", "below"]  
-else:
-    relations = ["left", "right", "top", "bottom"]  
+#region Prompts
 
-if (model_type == "LLAVA" or model_type == "OF"):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print("\nUsing %s\n" % device)
+def get_article(a):
+    if (a[0] in ("a", "e", "i", "o", "u")):
+        return "an " + a 
+    else:
+        return "a " + a
+
+def get_relation(relation):
+    if (relation in ("left", "right")):
+        return relation + " of"
+    else:
+        return relation
+
+def get_relation_single_clip(relation):   
+    return " on the " + relation + " of "
+
+def get_relation_clip(relation):
+    if (relation in ("left", "right")):
+        return " to the " + relation + " of "
+    else:
+        return " " + relation + " "
+
+def mirror_relation(relation):
+    if (relation == "left"):
+        return "right"
+    elif (relation == "right"):
+        return "left"
+    elif (relation == "above"):
+        return "below"
+    else:
+        return "above"
+
+def create_prompts(a, relation, relations, b=None, options=False):
+
+    relationsA = relations      
+    random.shuffle(relationsA)
+
+    if (b):
+        relationsA = ", ".join(relationsA[:-1]) + ", or " + get_relation(relationsA[-1])        
+        prompt = "Is the " + a + " " + relationsA + " the " + b  + " in the image?"
+    else:
+        relationsA = ", ".join(relationsA[:-1]) + ", or " + relationsA[-1]
+        
+        prompt = "Is the " + a + " on the " + relationsA + " of the image?"
+
+    if (options):
+        relationsChoices = relations
+        random.shuffle(relationsChoices)
+        relationsChoices = ", ".join(relationsChoices[:-1]) + ", or " + relationsChoices[-1]
+        prompt += ("\nAnswer with one of (%s) only." % relationsChoices)
+         
+    print(prompt)
+
+    return prompt
+
+def create_prompts_clip(a, b, relation, relations, background=None, allFour=True):
+
+    prompts = [get_article(a) + get_relation_clip(relation) + get_article(b)]
+
+    relations_extra = set(relations).difference([relation])
+
+    for relation in relations_extra:
+        prompts.append(get_article(a) + get_relation_clip(relation) + get_article(b))
+     
+    return prompts
+
+def create_prompts_single_clip(a, relation, relations):
+
+    prompts = [get_article(a) + get_relation_single_clip(relation) + "the image"]
+
+    relations_extra = set(relations).difference([relation])
+
+    for relation in relations_extra:
+        prompts.append(get_article(a) + get_relation_single_clip(relation) + "the image")    
+
+    return prompts
+
+def check_answer(correct_relation, relations, answer_text):
+
+    answer_text = answer_text.lower()
+
+    total_count = 0
+    relations_count = {}
+    for relation in relations:
+        x = answer_text.count(relation)
+        relations_count[relation] = x
+        
+    total_count = sum(relations_count.values())
+    
+    pred = "correct" if (total_count == 1 and relations_count[correct_relation] == 1) else "incorrect" if (total_count == 1 and relations_count[correct_relation] == 0) else "none"
+
+    return pred
+
+#endregion
+
+#region CreateModels
 
 def getGPT4():
     from azure.identity import DefaultAzureCredential 
@@ -79,6 +169,7 @@ def getOpenFlamingo():
         cross_attn_every_n_layers=1
     )
     model.to(device)
+    model.eval()
     print("\nModel on %s\n" % next(model.parameters()).device)
 
     # set image / mean metadata from pretrained_cfg if available, or use default
@@ -100,76 +191,31 @@ def getLLaVA():
     model_path = "/mnt/e/Source/LLaVA/checkpoints/liuhaotian/llava-v1.5-7b/"
     model_name = get_model_name_from_path(model_path)
     tokenizer, model, image_processor, _ = load_pretrained_model(model_path, None, model_name, load_4bit=True)
-
+    model.eval()
+    
     return model, image_processor, tokenizer 
 
-def get_article(a):
-    if (a[0] in ("a", "e", "i", "o", "u")):
-        return "an " + a 
-    else:
-        return "a " + a
-
-def get_relation(relation):
-    if (relation in ("left", "right")):
-        return relation + " of"
-    else:
-        return relation
-
-def mirror_relation(relation):
-    if (relation == "left"):
-        return "right"
-    elif (relation == "right"):
-        return "left"
-    elif (relation == "above"):
-        return "below"
-    else:
-        return "above"
-
-def create_prompts(a, b, relation, options = False):
-
-    relationsA = relations      
-    random.shuffle(relationsA)
-
-    if (usePairs):
-        relationsA = ", ".join(relationsA[:-1]) + ", or " + get_relation(relationsA[-1])        
-        prompt = "Is the " + a + " " + relationsA + " the " + b  + "?"
-    else:
-        relationsA = ", ".join(relationsA[:-1]) + ", or " + relationsA[-1]
-        
-        prompt = "Is the " + a + " on the " + relationsA + " of the image?"
-
-    if (options):
-        relationsB = relations
-        random.shuffle(relationsB)
-        relationsB = ", ".join(relationsB[:-1]) + ", or " + relationsB[-1]
-        prompt += (" Answer with one of (%s) only." % relationsB)
-
-    if (model_type == "OF"):
-        prompt = "<image>Question: " + prompt + " Answer:"
-        
-    elif (model_type == "PSI2V"):
-         #prompt = prompt + "\n<|image_1|>"
-         prompt = prompt.replace("image", "<|image_1|>")
-         
-    print(prompt)
-
-    return prompt
-
-def check_answer(correct_relation, answer_text):
-
-    answer_text = answer_text.lower()
-
-    total_count = 0
-    relations_count = {}
-    for relation in relations:
-        x = answer_text.count(relation)
-        relations_count[relation] = x
-        
-    total_count = sum(relations_count.values())
+def getOpenCLIP():
     
-    pred = "correct" if (total_count == 1 and relations_count[correct_relation] == 1) else "incorrect" if (total_count == 1 and relations_count[correct_relation] == 0) else "none"
+    arch = "ViT-L-14"
+    #arch = 'ViT-L-14-336'
+    #pretrained = 'openai'
+    pretrained = "E:/Source/open_clip/logs/best_spatial_checkpoint/epoch_1.pt"
+    
+    model, _, preprocess = open_clip.create_model_and_transforms(arch, pretrained=pretrained)
+    tokenizer = open_clip.get_tokenizer(arch)
+    model.to(device)
 
-    return pred
+    return model, preprocess, tokenizer
+
+def getFasterRCNN():
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(weights=torchvision.models.detection.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT)
+    model.eval()
+    
+    return model
+#endregion
+
+#region Generatetext
 
 def generate_text_gpt(headers, endpoint, query_image, query_text):
 
@@ -177,18 +223,6 @@ def generate_text_gpt(headers, endpoint, query_image, query_text):
     query_image.save(buffered, format="JPEG")
     base64_bytes = base64.b64encode(buffered.getvalue())
     base64_string = base64_bytes.decode('utf-8')
-
-    # data = {   
-    #     "transcript": [ 
-    #         { "type": "text", "data": query_text }, 
-    #         { "type": "image", "data": base64_string } 
-
-    #     ],   
-
-    #     "max_tokens": 50,   
-    #     "temperature": 0.7,   
-    #     "n": 1 
-    # }   
 
     data = {
         "messages": [
@@ -213,14 +247,22 @@ def generate_text_gpt(headers, endpoint, query_image, query_text):
 
     if (response.status_code == 200):
         answer_text = response.json()["choices"][0]["message"]["content"].strip()
-    else:
-        msg = response.json()["error"]["message"]
-        print("\n"+msg)
-        answer_text = [int(s) for s in msg.split() if s.isdigit()][0]
 
-    return answer_text
+        return answer_text, False
+
+    else:
+        answer_text = response.json()["error"]["message"]
+        print("\n"+answer_text)
+        #answer_text = [int(s) for s in msg.split() if s.isdigit()][0]
+
+        return answer_text, True
 
 def generate_text_psi2v(query_image, query_text):
+
+    query_text = query_text.replace("image", "<|image_1|>")
+    #query_text = query_text + " <|image_1|>"
+    
+    print(query_text)
 
     buffered = BytesIO()
     query_image.save(buffered, format="JPEG")
@@ -244,13 +286,16 @@ def generate_text_psi2v(query_image, query_text):
     if (response.status_code == 200):
         answer_text = response.json()["choices"][0]["text"].strip()
     else:
-        msg = response.json()["error"]["message"]
-        print("\n"+msg)
-        answer_text = [int(s) for s in msg.split() if s.isdigit()][0]
+        answer_text = response.json()["error"]["message"]
+        print("\n"+answer_text)
+        #answer_text = [int(s) for s in msg.split() if s.isdigit()][0]
 
-    return answer_text
+    return answer_text       
 
 def generate_text_of(model, image_processor, tokenizer, query_image, query_text):
+    
+    query_text = "<image>Question: " + query_text + " Answer:"
+
     """
     Step 2: Preprocessing images
     Details: For OpenFlamingo, we expect the image to be a torch tensor of shape 
@@ -342,46 +387,220 @@ def generate_text_llava(model, image_processor, tokenizer, query_image, query_te
 
     return outputs
 
-def test_spatial():    
-    if (os.name == "nt"):
-        drive = "E:/"    
+def generate_zeroshot_clip(model, image_processor, tokenizer, query_image, a, b, relation, relations):
+        
+    if (b):
+        prompts = create_prompts_clip(a, b, relation, relations)
     else:
-        drive = "/mnt/e"
+        prompts = create_prompts_single_clip(a, relation, relations)
+            
+    with torch.no_grad():
+        image = image_processor(query_image).unsqueeze(0).to(device)
+        image_feature = model.encode_image(image).cpu().numpy()
+        
+        text = tokenizer(prompts).to(device)
+        text_features = model.encode_text(text).cpu().numpy()
+        
+        text_probs = (100.0 * torch.tensor(image_feature) @ text_features.T).softmax(dim=-1)
+        res, ind = text_probs.topk(1)
+        
+    answer_text = prompts[ind]
+
+    return answer_text
+
+COCO_INSTANCE_CATEGORY_NAMES = [
+    '__background__', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
+    'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'N/A', 'stop sign',
+    'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
+    'elephant', 'bear', 'zebra', 'giraffe', 'N/A', 'backpack', 'umbrella', 'N/A', 'N/A',
+    'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
+    'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
+    'bottle', 'N/A', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
+    'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza',
+    'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'N/A', 'dining table',
+    'N/A', 'N/A', 'toilet', 'N/A', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
+    'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'N/A', 'book',
+    'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+]
+
+def get_prediction_fasterrcn(model, img, confidence=0.5):
+    """
+    get_prediction
+    parameters:
+        - img_path - path of the input image
+        - confidence - threshold value for prediction score
+    method:
+        - Image is obtained from the image path
+        - the image is converted to image tensor using PyTorch's Transforms
+        - image is passed through the model to get the predictions
+        - class, box coordinates are obtained, but only prediction score > threshold
+        are chosen.
     
-    if (usePairs):
-        path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_pairs_backgrounds"
+    """
+    transform = T.Compose([T.ToTensor()])
+    img = transform(img)
+    pred = model([img])
+    pred_class = [COCO_INSTANCE_CATEGORY_NAMES[i] for i in list(pred[0]['labels'].numpy())]
+    pred_boxes = [[(i[0], i[1]), (i[2], i[3])] for i in list(pred[0]['boxes'].detach().numpy())]
+    pred_score = list(pred[0]['scores'].detach().numpy())
+    pred_t = [pred_score.index(x) for x in pred_score if x>confidence][-1]
+    pred_boxes = pred_boxes[:pred_t+1]
+    pred_class = pred_class[:pred_t+1]
+    return pred_boxes, pred_class
+
+def detect_object_fasterrcn(model, img, confidence=0.5, rect_th=2, text_size=2, text_th=2):
+    boxes, pred_cls = get_prediction_fasterrcn(model, img, confidence)
+
+    img = np.array(img)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # print(len(boxes))
+    for i, box in enumerate(boxes):
+        pt1 = (int(np.round(box[0][0])), int(np.round(box[0][1])))
+        pt2 = (int(np.round(box[1][0])), int(np.round(box[1][1])))
+
+        cv2.rectangle(img, pt1, pt2, color=(0, 255, 0), thickness=rect_th)
+        cv2.putText(img,pred_cls[i], pt1, cv2.FONT_HERSHEY_SIMPLEX, text_size, (0,255,0),thickness=text_th)
+        plt.figure(figsize=(20,30))
+        plt.imshow(img)
+        plt.xticks([])
+        plt.yticks([])
+        plt.show()
+
+    return boxes, pred_cls
+
+def get_location(query_image, box):
+
+    w = query_image.width
+    h = query_image.height
+    
+    locations = {}
+    locations["left"] = (w*.25, h*.5)
+    locations["right"] = (w*.75, h*.5)
+    locations["top"] = (w*.5, h*.25)
+    locations["bottom"] = (w*.5, h*.75)
+    
+    dists = {}
+    for loc in locations:
+        coords = locations[loc]
+
+        cx = (box[0][0]+box[1][0])/2
+        cy = (box[0][1]+box[1][1])/2
+        
+        d = np.sqrt((coords[0] - cx)**2 + (coords[1] - cy)**2)
+        dists[loc] = d
+        
+    ind = np.argmin(list(dists.values()))
+
+    return list(locations.keys())[ind]
+
+def generate_fasterrcn(model, query_image, a, b, relation, relations):
+    boxes, pred_cls = get_prediction_fasterrcn(model, query_image)
+
+    locations_a = []
+    for i, cl in enumerate(pred_cls):
+        if (a == cl):
+            loc_a = get_location(query_image, boxes[i])
+            locations_a.append(loc_a)           
+
+    if (b):
+        locations_b = []
+        for i, cl in enumerate(pred_cls):
+            if (b == cl):
+                loc_b = get_location(query_image, boxes[i])
+                locations_b.append(loc_b)     
+
+        for i, loc_a in enumerate(locations_a):
+            for j, loc_b in enumerate(locations_b):
+      
+                if (loc_a == "left" and loc_b == "right" and relation == "left"):
+                    return relation, "correct"
+                elif (loc_a == "right" and loc_b == "left" and relation == "right"):
+                    return relation, "correct"
+                elif (loc_a == "top" and loc_b == "bottom" and relation == "above"):
+                    return relation, "correct"   
+                elif (loc_a == "bottom" and loc_b == "top" and relation == "below"):
+                    return relation, "correct"
+               
+        return loc_a + "_" + loc_b, "incorrect"
     else:
-        path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_single_backgrounds"
-    
-    images = []
-    with open(os.path.join(path, 'val.csv'), newline='') as csvfile: 
+        for i, loc_a in enumerate(locations_a):
+            if (loc_a == relation):
+                return relation, "correct"
+           
+        return locations_a[0], "incorrect"
+
+#endregion
+
+def llm_eval(model_type, model, image_processor, headers, endpoint, tokenizer, image, query_image, query_text, a, b, relation, relations):
+    if (model_type == "GPT"):
+        answer_text, error = generate_text_gpt(headers, endpoint, query_image, query_text)    
+
+        # retry
+        while (not isinstance(answer_text, str)):
+            print("Waiting %d seconds..." % answer_text)
+            time.sleep(float(answer_text) + .1)
+            answer_text, error = generate_text_gpt(headers, endpoint, query_image, query_text)
+                    
+        pred = "error" if error else check_answer(relation, relations, answer_text) 
+                    
+    elif (model_type == "OF"):                
+        answer_text = generate_text_of(model, image_processor, tokenizer, query_image, query_text)     
+        pred = check_answer(relation, relations, answer_text) 
+            
+    elif (model_type == "LLAVA"):                
+        answer_text = generate_text_llava(model, image_processor, tokenizer, query_image, query_text)  
+        pred = check_answer(relation, relations, answer_text) 
+                    
+    elif (model_type == "PSI2V"):                                
+        answer_text = generate_text_psi2v(query_image, query_text)  
+        pred = check_answer(relation, relations, answer_text) 
+
+    elif (model_type == "CLIP"):                                
+        answer_text = generate_zeroshot_clip(model, image_processor, tokenizer, query_image, a, b, relation, relations)  
+        pred = check_answer(relation, relations, answer_text) 
+        
+    elif (model_type == "FASTERRCNN"):
+        answer_text, pred = generate_fasterrcn(model, query_image, a, b, relation, relations)
+        
+    return answer_text, pred
+
+def test_spatial(path, model_type, usePairs):    
+
+    rows = []
+            
+    with open(os.path.join(path, 'val_prompts.csv'), newline='') as csvfile: 
         reader = csv.reader(csvfile)
         for row in reader:
-            images.append(row[0])
+            rows.append(row)
 
-    # images = list(set(images))
+    out_path = os.path.join(path, 'val_results_%s.csv' % model_type.lower())    
 
-    out_path = os.path.join(path, 'val_results_gpt.csv' if model_type == "GPT" else 'val_results_of.csv' if model_type == "OF" else 'val_results_llava.csv' if model_type == "LLAVA" else 'val_results_psi2v.csv')    
+    questions_answers = {}
+    preds = {}
     
     if (os.path.exists(out_path)):
-       preds = []
-       questions_answers = []
+        with open(out_path, newline='') as csvfile: 
+            reader = csv.reader(csvfile)
+            for row in reader:
+                image = row[0]
+                caption = row[1] 
+                query_text = row[2] 
+                relation = row[3] 
+                answer_text = row[4]
+                pred = row[5]
+                               
+                if (pred != "error"):                    
+                    questions_answers[image] = [caption, query_text, relation, answer_text, pred]
+                    preds[image] = pred
+                    
+    print("num samples %d" % len(rows))
 
-       with open(out_path, newline='') as csvfile: 
-           reader = csv.reader(csvfile)
-           for row in reader:
-               pred = row[3]
-
-               preds.append(pred)
-               questions_answers.append(row)
-    else:
-        preds = []
-        questions_answers = []
-
-    start_row = int(len(preds))
-
-    print("num samples %d start at %d" % (len(images), start_row))
-
+    headers = None
+    endpoint = None
+    model = None
+    image_processor = None
+    tokenizer = None
+    
     if (model_type == "GPT"):
         headers, endpoint = getGPT4()
         start = timer()
@@ -389,9 +608,30 @@ def test_spatial():
         model, image_processor, tokenizer = getOpenFlamingo()
     elif (model_type == "LLAVA"):
         model, image_processor, tokenizer = getLLaVA()
+    elif (model_type == "CLIP"):
+        model, image_processor, tokenizer = getOpenCLIP()
+    elif (model_type == "FASTERRCNN"):
+        model = getFasterRCNN()        
         
-    try:
-        for i, image in tqdm(enumerate(images), initial=start_row): 
+    if (usePairs):
+        relations = ["left", "right", "above", "below"]  
+    else:
+        relations = ["left", "right", "top", "bottom"]  
+
+    for i, row in tqdm(enumerate(rows)): 
+
+        image = row[0]            
+        caption = row[1]  
+        query_text = row[2]
+        relation = row[3]
+        
+        if (image in questions_answers):
+            continue
+        try:
+
+            image_path = os.path.join(path, image).replace("\\","/")
+            query_image = Image.open(image_path)
+
             parts = image.split("\\")
 
             if (usePairs):
@@ -400,85 +640,134 @@ def test_spatial():
                 a = parts[1]
                 b = None
 
-            relation = parts[2]
-
-            image_path = os.path.join(path, image).replace("\\","/")
-            query_image = Image.open(image_path)
-            
-            if (model_type == "GPT"):
-                query_text = create_prompts(a, b, relation, options=True)
-                answer_text = generate_text_gpt(headers, endpoint, query_image, query_text)    
-
-                while (not isinstance(answer_text, str)):
-                    print("Waiting %d seconds..." % answer_text)
-                    time.sleep(float(answer_text) + .1)
-                    answer_text = generate_text_gpt(headers, endpoint, query_image, query_text)
-
-            elif (model_type == "OF"):
-                query_text = create_prompts(a, b, relation, options=True)
-                answer_text = generate_text_of(model, image_processor, tokenizer, query_image, query_text)     
-            elif (model_type == "LLAVA"):
-                query_text = create_prompts(a, b, relation, options=True)
-                answer_text = generate_text_llava(model, image_processor, tokenizer, query_image, query_text)  
-            elif (model_type == "PSI2V"):                
-                query_text = create_prompts(a, b, relation, options=True)
-                answer_text = generate_text_psi2v(query_image, query_text)  
+            answer_text, pred = llm_eval(model_type, model, image_processor, headers, endpoint, tokenizer, image, query_image, query_text, a, b, relation, relations)
                 
             print("Query text: %s\nAnswer text: %s\nCorrect: %s\n" % (query_text, answer_text, relation))
 
-            pred = check_answer(relation, answer_text) 
-            preds.append(pred)
+            preds[image] = pred
 
             #if (i % 10  == 0):
                     
-            correct = sum(1 for pred in preds if pred == "correct")
-            incorrect = sum(1 for pred in preds if pred == "incorrect")
-            indetermined = sum(1 for pred in preds if pred == "none")        
-
-            questions_answers.append([image, query_text, answer_text.replace("\n","\\n"), pred])
-
-            print("Mean correct %f incorrect %f indetermined %f" % (correct/len(preds), incorrect/len(preds), indetermined/len(preds)))
+            correct = sum(1 for pred in preds.values() if pred == "correct")
+            incorrect = sum(1 for pred in preds.values() if pred == "incorrect")
+            indetermined = sum(1 for pred in preds.values() if pred == "none")        
+            n = sum(1 for pred in preds.values() if pred != "error")
+            
+            print("Mean correct %f incorrect %f indetermined %f" % (correct/n, incorrect/n, indetermined/n))
 
             #query_image.show()
+   
+        except Exception as e:
+            print(e)
+            answer_text = str(e.args)
+            pred = "error"
+            pass          
+        
+        except BaseException as e:
+            print(e)
+            answer_text = str(e.args)
+            pred = "error"            
+            pass        
 
-            if (model_type == "GPT"):
+        questions_answers[image] = [caption, query_text, relation, answer_text.replace("\n","\\n"), pred]
 
-                with open(out_path, 'w', newline='') as csvfile:
-                    writer = csv.writer(csvfile, delimiter=',')
+        with open(out_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',')
 
-                    for row in questions_answers:
-                        writer.writerow(row)
+            for row in questions_answers.keys():
+                writer.writerow([row] + questions_answers[row])
+                
+        if (model_type == "GPT"):
 
-                time.sleep(60)
+            # time.sleep(.5)    
 
-                end = timer()
-                if (end - start > 600): #get new token every 30 min
-                    print("Getting new GPT token after %.02f mins" % ((end - start)/60))
-                    headers, endpoint = getGPT4()
-                    start = timer()
-                else:
-                    print("GPT token is %.02f mins old" % ((end - start)/60))
-                #if (i > 3):
-                #    break    
+            end = timer()
+            if (end - start > 600): #get new token every 30 min
+                print("Getting new GPT token after %.02f mins" % ((end - start)/60))
+                headers, endpoint = getGPT4()
+                start = timer()
+            else:
+                print("GPT token is %.02f mins old" % ((end - start)/60))
 
-    except Exception as e:
-        print(e)
-        pass          
-    except BaseException as e:
-        print(e)
-        pass  
+    correct = sum(1 for pred in preds.values() if pred == "correct")
+    incorrect = sum(1 for pred in preds.values() if pred == "incorrect")
+    indetermined = sum(1 for pred in preds.values() if pred == "none")        
+    n = sum(1 for pred in preds.values() if pred != "error")
 
-    correct = sum(1 for pred in preds if pred == "correct")
-    incorrect = sum(1 for pred in preds if pred == "incorrect")
-    indetermined = sum(1 for pred in preds if pred == "none")
+    print("Mean correct %f incorrect %f indetermined %f" % (correct/n, incorrect/n, indetermined/n))
 
-    print("Mean correct %f incorrect %f indetermined %f" % (correct/len(preds), incorrect/len(preds), indetermined/len(preds)))
-    
     with open(out_path, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile, delimiter=',')
 
-        for row in questions_answers:
+        for row in questions_answers.keys():
+            writer.writerow([row] + questions_answers[row])
+
+def generate_prompts_spatial(path, usePairs):    
+    
+    rows = []
+            
+    with open(os.path.join(path, 'val.csv'), newline='') as csvfile: 
+        reader = csv.reader(csvfile)
+        for row in reader:
+            rows.append(row)
+            if (usePairs):
+                next(reader)
+            
+    query_texts = []
+
+    if (usePairs):
+        relations = ["left", "right", "above", "below"]  
+    else:
+        relations = ["left", "right", "top", "bottom"]  
+
+    for i, row in tqdm(enumerate(rows)):     
+        
+        image = row[0]
+
+        parts = image.split("\\")
+
+        if (usePairs):
+            a, b = parts[1].split("_")
+        else:
+            a = parts[1]
+            b = None
+
+        relation = parts[2]
+
+        query_text = create_prompts(a, relation, relations, b=b, options=True)
+        query_texts.append(query_text)
+            
+        rows[i] += [query_text, relation]
+
+    out_path = os.path.join(path, 'val_prompts.csv')   
+
+    with open(out_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',')
+        for row in rows:
             writer.writerow(row)
 
 if __name__ == "__main__":
-    test_spatial()
+    #test_spatial()
+    
+    if (os.name == "nt"):
+        drive = "E:/"    
+    else:
+        drive = "/mnt/e"
+    
+    usePairs = False
+
+    if (usePairs):
+        path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_pairs_backgrounds"
+    else:
+        path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_single_backgrounds"
+
+    #generate_prompts_spatial(path, usePairs)
+    
+    #model_type = "GPT"
+    #model_type = "OF"
+    #model_type = "LLAVA"
+    #model_type = "PSI2V"
+    #model_type = "CLIP"
+    model_type = "FASTERRCNN"
+    
+    test_spatial(path, model_type, usePairs)

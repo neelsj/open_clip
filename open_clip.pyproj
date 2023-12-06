@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{24a0ad6f-c932-43b1-9269-7283f5cdb141}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>tests\test_spatial_open_flamingo.py</StartupFile>
+    <StartupFile>tests\test_spatial_all.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -90,8 +90,8 @@
     <Compile Include="tests\test_inference_simple.py" />
     <Compile Include="tests\test_laion.py" />
     <Compile Include="tests\test_num_shards.py" />
-    <Compile Include="tests\test_spatial.py" />
-    <Compile Include="tests\test_spatial_open_flamingo.py" />
+    <Compile Include="tests\test_spatial_all.py" />
+    <Compile Include="tests\test_spatial_openclip.py" />
     <Compile Include="tests\test_training_simple.py" />
     <Compile Include="tests\test_wds.py" />
     <Compile Include="tests\util_test.py" />

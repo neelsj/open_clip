@@ -97,17 +97,6 @@ def create_prompts(a, b, relation, background=None, allFour=True):
 
     return prompts
 
-def create_prompt(a, b, relation, background=None, allFour=True):
-
-    prompt = get_article(a) + get_relation(relation) + get_article(b)
-       
-    if (background):
-        background = background.replace("-", " ").replace("_", " ")
-        
-        prompt +=  " in a " + background        
-
-    return prompt
-
 def create_prompts_single(a, relation):
 
     relations = ["top", "bottom", "left", "right"]
