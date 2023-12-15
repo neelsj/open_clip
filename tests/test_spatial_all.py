@@ -1,3 +1,4 @@
+from sympy import Q
 import torch
 from torch._dynamo.utils import ifdyn
 import torchvision
@@ -27,6 +28,10 @@ import time
 from timeit import default_timer as timer
 
 import matplotlib.pyplot as plt 
+
+from pycocotools.coco import COCO
+
+from datetime import datetime
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -149,8 +154,9 @@ def getGPT4():
     # Prepare endpoint, headers, and request body 
     #endpoint = f"{base_url}/rainbow?api-version=2023-03-15-preview" 
     #endpoint = f"{base_url}/rainbow?api-version=2023-09-15-preview" 
-    endpoint = f"{base_url}/chat/completions?api-version=2023-09-15-preview"
-    
+    #endpoint = f"{base_url}/chat/completions?api-version=2023-09-15-preview"
+    endpoint = f"{base_url}/chat/completions?api-version=2023-07-01-preview"
+        
     return headers, endpoint
 
 def getOpenFlamingo():
@@ -255,11 +261,11 @@ def generate_text_gpt(headers, endpoint, query_image, query_text):
         print("\n"+answer_text)
         #answer_text = [int(s) for s in msg.split() if s.isdigit()][0]
 
-        return answer_text, True
+        return answer_text, False if "filtered" in answer_text else True
 
-def generate_text_psi2v(query_image, query_text):
+def generate_text_phi2v(query_image, query_text):
 
-    query_text = query_text.replace("image", "<|image_1|>")
+    query_text = query_text.replace("image", "<|image_1|>") + " Answer:"
     #query_text = query_text + " <|image_1|>"
     
     print(query_text)
@@ -282,7 +288,6 @@ def generate_text_psi2v(query_image, query_text):
     # Make the API call   
     response = requests.post(url, headers=header, json=data, timeout=600)
             
-
     if (response.status_code == 200):
         answer_text = response.json()["choices"][0]["text"].strip()
     else:
@@ -443,9 +448,9 @@ def get_prediction_fasterrcn(model, img, confidence=0.5):
     pred_class = [COCO_INSTANCE_CATEGORY_NAMES[i] for i in list(pred[0]['labels'].numpy())]
     pred_boxes = [[(i[0], i[1]), (i[2], i[3])] for i in list(pred[0]['boxes'].detach().numpy())]
     pred_score = list(pred[0]['scores'].detach().numpy())
-    pred_t = [pred_score.index(x) for x in pred_score if x>confidence][-1]
-    pred_boxes = pred_boxes[:pred_t+1]
-    pred_class = pred_class[:pred_t+1]
+    pred_t = [pred_score.index(x) for x in pred_score if x>confidence]
+    pred_boxes = [pred_boxes[i] for i in pred_t]
+    pred_class = [pred_class[i] for i in pred_t]
     return pred_boxes, pred_class
 
 def detect_object_fasterrcn(model, img, confidence=0.5, rect_th=2, text_size=2, text_th=2):
@@ -460,11 +465,12 @@ def detect_object_fasterrcn(model, img, confidence=0.5, rect_th=2, text_size=2, 
 
         cv2.rectangle(img, pt1, pt2, color=(0, 255, 0), thickness=rect_th)
         cv2.putText(img,pred_cls[i], pt1, cv2.FONT_HERSHEY_SIMPLEX, text_size, (0,255,0),thickness=text_th)
-        plt.figure(figsize=(20,30))
-        plt.imshow(img)
-        plt.xticks([])
-        plt.yticks([])
-        plt.show()
+        
+    plt.figure(figsize=(20,30))
+    plt.imshow(img)
+    plt.xticks([])
+    plt.yticks([])
+    plt.show()
 
     return boxes, pred_cls
 
@@ -493,78 +499,109 @@ def get_location(query_image, box):
 
     return list(locations.keys())[ind]
 
-def generate_fasterrcn(model, query_image, a, b, relation, relations):
-    boxes, pred_cls = get_prediction_fasterrcn(model, query_image)
+def generate_fasterrcn(model, query_image, a, b, relation, relations, task):
+    boxes, pred_cls = get_prediction_fasterrcn(model, query_image, confidence=0.5)
 
-    locations_a = []
-    for i, cl in enumerate(pred_cls):
-        if (a == cl):
-            loc_a = get_location(query_image, boxes[i])
-            locations_a.append(loc_a)           
+    if (task == "SPATIAL_REASONING"):
 
-    if (b):
-        locations_b = []
+        locations_a = []
         for i, cl in enumerate(pred_cls):
-            if (b == cl):
-                loc_b = get_location(query_image, boxes[i])
-                locations_b.append(loc_b)     
+            if (a == cl):
+                loc_a = get_location(query_image, boxes[i])
+                locations_a.append(loc_a)           
 
-        for i, loc_a in enumerate(locations_a):
-            for j, loc_b in enumerate(locations_b):
+        if (b):
+            locations_b = []
+            for i, cl in enumerate(pred_cls):
+                if (b == cl):
+                    loc_b = get_location(query_image, boxes[i])
+                    locations_b.append(loc_b)     
+
+            for i, loc_a in enumerate(locations_a):
+                for j, loc_b in enumerate(locations_b):
       
-                if (loc_a == "left" and loc_b == "right" and relation == "left"):
-                    return relation, "correct"
-                elif (loc_a == "right" and loc_b == "left" and relation == "right"):
-                    return relation, "correct"
-                elif (loc_a == "top" and loc_b == "bottom" and relation == "above"):
-                    return relation, "correct"   
-                elif (loc_a == "bottom" and loc_b == "top" and relation == "below"):
-                    return relation, "correct"
+                    if (loc_a == "left" and loc_b == "right" and relation == "left"):
+                        return relation
+                    elif (loc_a == "right" and loc_b == "left" and relation == "right"):
+                        return relation
+                    elif (loc_a == "top" and loc_b == "bottom" and relation == "above"):
+                        return relation  
+                    elif (loc_a == "bottom" and loc_b == "top" and relation == "below"):
+                        return relation
                
-        return loc_a + "_" + loc_b, "incorrect"
-    else:
-        for i, loc_a in enumerate(locations_a):
-            if (loc_a == relation):
-                return relation, "correct"
+            return (locations_a[0] if len(locations_a)>0 else "none") + "_" + (locations_b[0] if len(locations_b)>0 else "none")
+        else:
+            for i, loc_a in enumerate(locations_a):
+                if (loc_a == relation):
+                    return relation
            
-        return locations_a[0], "incorrect"
+            return locations_a[0] if len(locations_a)>0 else "none"
+        
+    elif (task == "RECOGNITION" or task == "VISUAL_PROMPTING"):
 
+        answer_text = " ".join(pred_cls)
+
+        return answer_text
 #endregion
 
-def llm_eval(model_type, model, image_processor, headers, endpoint, tokenizer, image, query_image, query_text, a, b, relation, relations):
+def llm_eval(model_type, model, image_processor, headers, endpoint, tokenizer, image, query_image, query_text, a, b, relation, relations, task):
     if (model_type == "GPT"):
         answer_text, error = generate_text_gpt(headers, endpoint, query_image, query_text)    
 
         # retry
-        while (not isinstance(answer_text, str)):
-            print("Waiting %d seconds..." % answer_text)
-            time.sleep(float(answer_text) + .1)
+        while (error):
+            print("Waiting 1 seconds...")
+            time.sleep(1)
             answer_text, error = generate_text_gpt(headers, endpoint, query_image, query_text)
-                    
-        pred = "error" if error else check_answer(relation, relations, answer_text) 
                     
     elif (model_type == "OF"):                
         answer_text = generate_text_of(model, image_processor, tokenizer, query_image, query_text)     
-        pred = check_answer(relation, relations, answer_text) 
             
     elif (model_type == "LLAVA"):                
         answer_text = generate_text_llava(model, image_processor, tokenizer, query_image, query_text)  
-        pred = check_answer(relation, relations, answer_text) 
                     
-    elif (model_type == "PSI2V"):                                
-        answer_text = generate_text_psi2v(query_image, query_text)  
-        pred = check_answer(relation, relations, answer_text) 
+    elif (model_type == "PHI2V"):                                
+        answer_text = generate_text_phi2v(query_image, query_text)  
 
     elif (model_type == "CLIP"):                                
         answer_text = generate_zeroshot_clip(model, image_processor, tokenizer, query_image, a, b, relation, relations)  
-        pred = check_answer(relation, relations, answer_text) 
         
     elif (model_type == "FASTERRCNN"):
-        answer_text, pred = generate_fasterrcn(model, query_image, a, b, relation, relations)
+        answer_text = generate_fasterrcn(model, query_image, a, b, relation, relations, task)
         
-    return answer_text, pred
+    return answer_text
 
-def test_spatial(path, model_type, usePairs):    
+def check_dectection_answer(answer_text, a, b=None):
+    a_parts = a.split(" ")                
+    ps = []
+
+    for p in a_parts:
+        correct = True if p in answer_text.lower() else False
+        ps.append(correct)
+                     
+    pred_a_bool = any(ps)                    
+
+    if (usePairs):
+        b_parts = b.split(" ")                
+        ps = []
+
+        for p in b_parts:
+            correct = True if p in answer_text.lower() else False
+            ps.append(correct)
+                    
+        pred_b_bool = any(ps)
+
+        pred = "correct" if (pred_a_bool and pred_b_bool) else "incorrect"
+
+        relation = a + " and " + b
+    else:
+        pred = "correct" if pred_a_bool else "incorrect"
+                
+        relation = a
+
+    return relation, pred
+
+def test_spatial(path, model_type, usePairs, task, detectionPrompt=None):    
 
     rows = []
             
@@ -572,8 +609,8 @@ def test_spatial(path, model_type, usePairs):
         reader = csv.reader(csvfile)
         for row in reader:
             rows.append(row)
-
-    out_path = os.path.join(path, 'val_results_%s.csv' % model_type.lower())    
+    
+    out_path = os.path.join(path, 'val_results_%s_%s.csv' % (task.lower(), model_type.lower()))
 
     questions_answers = {}
     preds = {}
@@ -584,7 +621,7 @@ def test_spatial(path, model_type, usePairs):
             for row in reader:
                 image = row[0]
                 caption = row[1] 
-                query_text = row[2] 
+                query_text = detectionPrompt if (detectionPrompt) else row[2] 
                 relation = row[3] 
                 answer_text = row[4]
                 pred = row[5]
@@ -622,7 +659,7 @@ def test_spatial(path, model_type, usePairs):
 
         image = row[0]            
         caption = row[1]  
-        query_text = row[2]
+        query_text = detectionPrompt if (detectionPrompt) else row[2]
         relation = row[3]
         
         if (image in questions_answers):
@@ -640,9 +677,21 @@ def test_spatial(path, model_type, usePairs):
                 a = parts[1]
                 b = None
 
-            answer_text, pred = llm_eval(model_type, model, image_processor, headers, endpoint, tokenizer, image, query_image, query_text, a, b, relation, relations)
+            answer_text = llm_eval(model_type, model, image_processor, headers, endpoint, tokenizer, image, query_image, query_text, a, b, relation, relations, task)
                 
-            print("Query text: %s\nAnswer text: %s\nCorrect: %s\n" % (query_text, answer_text, relation))
+            if (detectionPrompt):
+                correct_text, pred = check_dectection_answer(answer_text, a, b)
+            else:
+                pred = check_answer(relation, relations, answer_text) 
+                correct_text = relation
+            
+            # answer_text2 = llm_eval(model_type, model, image_processor, headers, endpoint, tokenizer, image, query_image, query_text, a, b, relation, relations, "RECOGNITION")
+            # correct_text2, pred2 = check_dectection_answer(answer_text2, a, b)
+
+            # if (pred == "correct" and pred2 != "correct"):
+            #     print("%d: %s\n" % (i, image_path))
+
+            print("Query text: %s\nAnswer text: %s\nCorrect: %s\n" % (query_text, answer_text, correct_text))
 
             preds[image] = pred
 
@@ -671,7 +720,7 @@ def test_spatial(path, model_type, usePairs):
 
         questions_answers[image] = [caption, query_text, relation, answer_text.replace("\n","\\n"), pred]
 
-        with open(out_path, 'w', newline='') as csvfile:
+        with open(out_path, 'w', newline='', encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
 
             for row in questions_answers.keys():
@@ -679,7 +728,7 @@ def test_spatial(path, model_type, usePairs):
                 
         if (model_type == "GPT"):
 
-            # time.sleep(.5)    
+            time.sleep(2)
 
             end = timer()
             if (end - start > 600): #get new token every 30 min
@@ -696,11 +745,207 @@ def test_spatial(path, model_type, usePairs):
 
     print("Mean correct %f incorrect %f indetermined %f" % (correct/n, incorrect/n, indetermined/n))
 
-    with open(out_path, 'w', newline='') as csvfile:
+    with open(out_path, 'w', newline='', encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile, delimiter=',')
 
         for row in questions_answers.keys():
             writer.writerow([row] + questions_answers[row])
+
+def score_prompting_and_rec(path, model_type, usePairs, recognition, detectionPrompt=None):    
+
+    if (task == "SPATIAL_REASONING"):
+        out_path = os.path.join(path, 'val_results_%s.csv' % (model_type.lower()))
+    elif (task == "VISUAL_PROMPTING"):
+        out_path = os.path.join(path, 'val_results_detection_prompt_%s.csv' % (model_type.lower()))        
+    else:
+        out_path = os.path.join(path, 'val_results_%s_%s.csv' % (task.lower(), model_type.lower()))
+    
+    rows = []
+            
+    with open(out_path, newline='', encoding="utf-8") as csvfile: 
+        reader = csv.reader(csvfile)
+        for row in reader:
+            rows.append(row)
+    
+    print("num samples %d" % len(rows))     
+        
+    if (usePairs):
+        relations = ["left", "right", "above", "below"]  
+    else:
+        relations = ["left", "right", "top", "bottom"]  
+
+    preds = []
+
+    for i, row in enumerate(rows): 
+
+        if (len(row) == 6):
+            image = row[0]
+            caption = row[1] 
+            query_text = row[2] 
+            relation = row[3] if (row[3]) else image.split("\\")[2]
+            answer_text = row[4]
+            pred = row[5]
+        else:
+            image = row[0]
+            query_text = row[1] 
+            relation = image.split("\\")[2]
+            answer_text = row[2]
+            pred = row[3]
+        
+        parts = image.split("\\")
+
+        if (usePairs):
+            a, b = parts[1].split("_")
+        else:
+            a = parts[1]
+            b = ""
+       
+        answer_text = answer_text.lower()
+        answer_text = answer_text.replace("sofa", "couch")
+
+        if ("filtered" in answer_text):
+            pred = "none"
+        else:
+            if (detectionPrompt):
+                correct_text, pred = check_dectection_answer(answer_text, a, b)
+            else:
+                pred = check_answer(relation, relations, answer_text) 
+                correct_text = relation
+
+        if (pred == "incorrect" or pred == "error"):
+            print("Query text: %s\nAnswer text: %s\nCorrect: %s\n" % (query_text, answer_text, correct_text))
+
+        preds.append(pred)
+
+    correct = sum(1 for pred in preds if pred == "correct")
+    incorrect = sum(1 for pred in preds if pred == "incorrect")
+    indetermined = sum(1 for pred in preds if pred == "none")        
+    n = sum(1 for pred in preds if pred != "error")
+
+    print("Mean correct %f incorrect %f indetermined %f" % (correct/n, incorrect/n, indetermined/n))
+
+COCO_INFO = {
+    "description": "",
+    "url": "",
+    "version": "1",
+    "year": 2022,
+    "contributor": "MSR CV Group",
+    "date_created": datetime.now().strftime("%m/%d/%Y")
+}
+
+COCO_LICENSES = [{
+    "url": "",
+    "id": 0,
+    "name": "License"
+}]
+
+def intersection_over_union(gt, pred):
+    # determine the (x, y)-coordinates of the intersection rectangle
+    xA = max(gt[0], pred[0])
+    yA = max(gt[1], pred[1])
+    xB = min(gt[2], pred[2])
+    yB = min(gt[3], pred[3])
+    # if there is no overlap between predicted and ground-truth box
+    if xB < xA or yB < yA:
+        return 0.0
+    # compute the area of intersection rectangle
+    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+    # compute the area of both the prediction and ground-truth
+    # rectangles
+    boxAArea = (gt[2] - gt[0] + 1) * (gt[3] - gt[1] + 1)
+    boxBArea = (pred[2] - pred[0] + 1) * (pred[3] - pred[1] + 1)
+    # compute the intersection over union by taking the intersection
+    # area and dividing it by the sum of prediction + ground-truth
+    # areas - the intersection area
+    iou = interArea / float(boxAArea + boxBArea - interArea)
+    # return the intersection over union value
+    return iou
+
+def score_detection(path, model_type):    
+    
+    json_path = os.path.join(path, 'coco_instances.json')
+
+    coco = COCO(json_path)
+    cat_ids = coco.getCatIds()
+    cats = coco.loadCats(cat_ids)
+
+    cat_to_id = {}
+
+    for cat in enumerate(cats):
+        cat_to_id[cat["name"]] = cat["id"]
+    
+    out_path = os.path.join(path, 'val_results_obeject_detection_%s.csv' % (model_type.lower()))
+    
+    rows = []
+            
+    with open(out_path, newline='', encoding="utf-8") as csvfile: 
+        reader = csv.reader(csvfile)
+        for row in reader:
+            rows.append(row)
+    
+    print("num samples %d" % len(rows))     
+    
+    img_infos = []
+    
+    for image_id, row in enumerate(rows): 
+        image = row[0]
+        answer_text = row[4]
+        if ("[" in answer_text):
+            
+            w, h = Image.open(os.path.join(path, image)).size
+
+            img_info = {}  
+            img_info["license"] = 0
+            img_info["file_name"] = image
+            img_info["width"] = w
+            img_info["height"] = h
+            img_info["id"] = image_id
+            
+            img_infos.append(img_infos)
+        
+            annotation_id = 0
+            annotations = []
+       
+            dets = answer_text.split("[")
+
+            for det in dets:
+                ind = answer_text.find("[")
+                answer_text = answer_text[ind:]
+                box, label, confidence = answer_text.split("-")
+            
+                if (box and label and confidence):
+                    xmin, ymin, xmax, ymax = box.strip()
+                    label = label.strip()
+                    confidence = float(confidence.strip())
+
+                    annotation = {
+                        'iscrowd': False,
+                        'image_id': image_id,
+                        'category_id':  cat_to_id[label],
+                        'id': annotation_id,
+                        'bbox': [xmin, ymin, xmax-xmin, ymax-ymin],
+                        'area': (xmax-xmin)*(ymax-ymin)
+                    }
+                
+                    annotations.append(annotation)
+                    annotation_id += 1                
+
+
+    print("saving annotations to coco as json ")
+    ### create COCO JSON annotations
+    my_dict = {}
+    my_dict["info"] = COCO_INFO
+    my_dict["licenses"] = COCO_LICENSES
+    my_dict["images"] = img_infos
+    my_dict["categories"] = cats
+    my_dict["annotations"] = annotations
+
+    # TODO: specify coco file locaiton 
+    output_file_path = os.path.join(path, "coco_instances.json")
+    with open(output_file_path, 'w+') as json_file:
+        json_file.write(json.dumps(my_dict))
+
+    print(">> complete. find coco json here: ", output_file_path)
 
 def generate_prompts_spatial(path, usePairs):    
     
@@ -741,7 +986,7 @@ def generate_prompts_spatial(path, usePairs):
 
     out_path = os.path.join(path, 'val_prompts.csv')   
 
-    with open(out_path, 'w', newline='') as csvfile:
+    with open(out_path, 'w', newline='', encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile, delimiter=',')
         for row in rows:
             writer.writerow(row)
@@ -755,19 +1000,59 @@ if __name__ == "__main__":
         drive = "/mnt/e"
     
     usePairs = False
-
-    if (usePairs):
-        path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_pairs_backgrounds"
-    else:
-        path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_single_backgrounds"
-
-    #generate_prompts_spatial(path, usePairs)
     
-    #model_type = "GPT"
+    #task = "RECOGNITION"
+    #task = "VISUAL_PROMPTING"
+    #task = "SPATIAL_REASONING"
+    task = "OBEJECT_DETECTION"
+    
+    model_type = "GPT"
     #model_type = "OF"
     #model_type = "LLAVA"
-    #model_type = "PSI2V"
+    #model_type = "PHI2V"
     #model_type = "CLIP"
-    model_type = "FASTERRCNN"
-    
-    test_spatial(path, model_type, usePairs)
+    #model_type = "FASTERRCNN"
+
+    if (task == "RECOGNITION"):
+        if (usePairs):
+            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_pairs_backgrounds"
+        else:
+            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_single_backgrounds"
+
+        detectionPrompt = "What objects are in this image?"
+        
+    elif (task == "VISUAL_PROMPTING"):
+        if (usePairs):
+            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_pairs_boxes"
+            
+            detectionPrompt = "What objects are in the red and yellow box in this image?"
+        else:
+            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_single_boxes"
+            
+            detectionPrompt = "What object is in the red box in this image?"
+            
+    elif (task == "SPATIAL_REASONING"):
+
+        if (usePairs):
+            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_pairs_backgrounds"
+        else:
+            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_single_backgrounds"
+
+        detectionPrompt = None
+
+    elif (task == "OBEJECT_DETECTION"):
+        
+        if (usePairs):
+            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_pairs_detection"
+        else:
+            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_single_detection"
+
+        detectionPrompt = "Return the label and the bounding box normalized coordinates of the objects in the following image in the following format: [x0, y0, x1, y1] - class - confidence"
+        
+    #generate_prompts_spatial(path, usePairs)
+
+    #test_spatial(path, model_type, usePairs, task, detectionPrompt)
+
+    #score_prompting_and_rec(path, model_type, usePairs, task, detectionPrompt)
+
+    score_detection(path, model_type)
