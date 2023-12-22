@@ -30,8 +30,11 @@ from timeit import default_timer as timer
 import matplotlib.pyplot as plt 
 
 from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
 
 from datetime import datetime
+
+import re
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -240,7 +243,7 @@ def generate_text_gpt(headers, endpoint, query_image, query_text):
                 { "image": base64_string }                          # Images are represented like this.q
             ] }
         ],  
-        "max_tokens": 50,  
+        "max_tokens": 200,  
         "temperature": 0.7,  
         "n": 1
     }  
@@ -451,7 +454,8 @@ def get_prediction_fasterrcn(model, img, confidence=0.5):
     pred_t = [pred_score.index(x) for x in pred_score if x>confidence]
     pred_boxes = [pred_boxes[i] for i in pred_t]
     pred_class = [pred_class[i] for i in pred_t]
-    return pred_boxes, pred_class
+    pred_score = [pred_score[i] for i in pred_t]
+    return pred_boxes, pred_class, pred_score
 
 def detect_object_fasterrcn(model, img, confidence=0.5, rect_th=2, text_size=2, text_th=2):
     boxes, pred_cls = get_prediction_fasterrcn(model, img, confidence)
@@ -500,7 +504,7 @@ def get_location(query_image, box):
     return list(locations.keys())[ind]
 
 def generate_fasterrcn(model, query_image, a, b, relation, relations, task):
-    boxes, pred_cls = get_prediction_fasterrcn(model, query_image, confidence=0.5)
+    boxes, pred_cls, pred_score = get_prediction_fasterrcn(model, query_image, confidence=0.5)
 
     if (task == "SPATIAL_REASONING"):
 
@@ -540,6 +544,15 @@ def generate_fasterrcn(model, query_image, a, b, relation, relations, task):
     elif (task == "RECOGNITION" or task == "VISUAL_PROMPTING"):
 
         answer_text = " ".join(pred_cls)
+        
+    elif (task == "OBJECT_DETECTION"):
+
+        answer_text = ""
+
+        w, h = query_image.size
+
+        for i, box in enumerate(boxes):
+            answer_text += "[%f, %f, %f, %f] - %s - %f\n" % (box[0][0]/w, box[0][1]/h, box[1][0]/w, box[1][1]/h, pred_cls[i], pred_score[i])
 
         return answer_text
 #endregion
@@ -824,57 +837,26 @@ def score_prompting_and_rec(path, model_type, usePairs, recognition, detectionPr
 
     print("Mean correct %f incorrect %f indetermined %f" % (correct/n, incorrect/n, indetermined/n))
 
-COCO_INFO = {
-    "description": "",
-    "url": "",
-    "version": "1",
-    "year": 2022,
-    "contributor": "MSR CV Group",
-    "date_created": datetime.now().strftime("%m/%d/%Y")
-}
-
-COCO_LICENSES = [{
-    "url": "",
-    "id": 0,
-    "name": "License"
-}]
-
-def intersection_over_union(gt, pred):
-    # determine the (x, y)-coordinates of the intersection rectangle
-    xA = max(gt[0], pred[0])
-    yA = max(gt[1], pred[1])
-    xB = min(gt[2], pred[2])
-    yB = min(gt[3], pred[3])
-    # if there is no overlap between predicted and ground-truth box
-    if xB < xA or yB < yA:
-        return 0.0
-    # compute the area of intersection rectangle
-    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
-    # compute the area of both the prediction and ground-truth
-    # rectangles
-    boxAArea = (gt[2] - gt[0] + 1) * (gt[3] - gt[1] + 1)
-    boxBArea = (pred[2] - pred[0] + 1) * (pred[3] - pred[1] + 1)
-    # compute the intersection over union by taking the intersection
-    # area and dividing it by the sum of prediction + ground-truth
-    # areas - the intersection area
-    iou = interArea / float(boxAArea + boxBArea - interArea)
-    # return the intersection over union value
-    return iou
-
 def score_detection(path, model_type):    
     
     json_path = os.path.join(path, 'coco_instances.json')
 
     coco = COCO(json_path)
-    cat_ids = coco.getCatIds()
-    cats = coco.loadCats(cat_ids)
+    coco_img_ids = coco.getImgIds()
+    coco_imgs = coco.loadImgs(coco_img_ids)
+    coco_file_name_to_id = {}
 
-    cat_to_id = {}
+    for c in coco_imgs:
+        coco_file_name_to_id[c["file_name"]] = c["id"]
 
-    for cat in enumerate(cats):
-        cat_to_id[cat["name"]] = cat["id"]
+    coco_cat_ids = coco.getCatIds()
+    coco_cats = coco.loadCats(coco_cat_ids)
+    coco_cat_name_to_id = {}
     
-    out_path = os.path.join(path, 'val_results_obeject_detection_%s.csv' % (model_type.lower()))
+    for c in coco_cats:
+        coco_cat_name_to_id[c["name"]] = c["id"]
+
+    out_path = os.path.join(path, 'val_results_object_detection_%s.csv' % (model_type.lower()))
     
     rows = []
             
@@ -887,65 +869,90 @@ def score_detection(path, model_type):
     
     img_infos = []
     
+    tp = 0
+    fp = 0
+    tn = 0
+    fn = 0    
+
+    annotations = []
+
     for image_id, row in enumerate(rows): 
         image = row[0]
         answer_text = row[4]
+
         if ("[" in answer_text):
             
-            w, h = Image.open(os.path.join(path, image)).size
+            img = Image.open(os.path.join(path, image))
+            w, h = img.size
 
-            img_info = {}  
-            img_info["license"] = 0
-            img_info["file_name"] = image
-            img_info["width"] = w
-            img_info["height"] = h
-            img_info["id"] = image_id
-            
-            img_infos.append(img_infos)
-        
-            annotation_id = 0
-            annotations = []
-       
-            dets = answer_text.split("[")
+            # img = np.array(img)
+
+            dets = answer_text.split("\\n")
 
             for det in dets:
-                ind = answer_text.find("[")
-                answer_text = answer_text[ind:]
-                box, label, confidence = answer_text.split("-")
+                try:
+                    parts = det.split("-")
+                    if (len(parts)==3):
+                        box_string, label, confidence = parts
+                        confidence = float(confidence.strip())
+                    elif (len(parts)==2):
+                        box_string, label = parts
+                        confidence = .5
+                    else:
+                        continue
             
-                if (box and label and confidence):
-                    xmin, ymin, xmax, ymax = box.strip()
+                    box_string = box_string.replace("x0","")
+                    box_string = box_string.replace("y0","")
+                    box_string = box_string.replace("x1","")
+                    box_string = box_string.replace("y1","")
+                    
+                    box = re.findall(r"[-+]?\d*\.\d+|\d+", box_string)
+
+                    box = [float(b) for b in box]
+                    xmin, ymin, xmax, ymax = box
+                    box = [xmin*w, ymin*h, (xmax-xmin)*w, (ymax-ymin)*h]
+                        
+                    # pt1 = (int(np.round(box[0])), int(np.round(box[1])))
+                    # pt2 = (int(np.round(box[2])), int(np.round(box[3])))
+
+                    # rect_th=2
+                    # text_size=2
+                    # text_th=2
+                        
+                    # cv2.rectangle(img, pt1, pt2, color=(0, 255, 0), thickness=rect_th)
+                    # cv2.putText(img,label, pt1, cv2.FONT_HERSHEY_SIMPLEX, text_size, (0,255,0),thickness=text_th)
+
                     label = label.strip()
-                    confidence = float(confidence.strip())
 
-                    annotation = {
-                        'iscrowd': False,
-                        'image_id': image_id,
-                        'category_id':  cat_to_id[label],
-                        'id': annotation_id,
-                        'bbox': [xmin, ymin, xmax-xmin, ymax-ymin],
-                        'area': (xmax-xmin)*(ymax-ymin)
-                    }
-                
-                    annotations.append(annotation)
-                    annotation_id += 1                
+                    if (label in coco_cat_name_to_id.keys()):
+                        annotation = {
+                            "image_id": coco_file_name_to_id[image],
+                            'category_id':  coco_cat_name_to_id[label],
+                            'bbox': box,
+                            'score': confidence,
+                        }
+                        annotations.append(annotation)
+                        
+                except Exception as e:
+                    print(e)
+                    pass          
+        
+                except BaseException as e:
+                    print(e)
+                    pass   
 
+    json_out_path = os.path.join(path, 'val_results_object_detection_%s.json' % (model_type.lower()))
 
-    print("saving annotations to coco as json ")
-    ### create COCO JSON annotations
-    my_dict = {}
-    my_dict["info"] = COCO_INFO
-    my_dict["licenses"] = COCO_LICENSES
-    my_dict["images"] = img_infos
-    my_dict["categories"] = cats
-    my_dict["annotations"] = annotations
+    with open(json_out_path, "w") as f:
+        json.dump(annotations, f, indent=4)
 
-    # TODO: specify coco file locaiton 
-    output_file_path = os.path.join(path, "coco_instances.json")
-    with open(output_file_path, 'w+') as json_file:
-        json_file.write(json.dumps(my_dict))
+    cocovalPrediction = coco.loadRes(json_out_path)
 
-    print(">> complete. find coco json here: ", output_file_path)
+    cocoEval = COCOeval(coco, cocovalPrediction, "bbox")    
+    cocoEval.params.useCats = 0
+    cocoEval.evaluate()
+    cocoEval.accumulate()
+    cocoEval.summarize()
 
 def generate_prompts_spatial(path, usePairs):    
     
@@ -1004,7 +1011,7 @@ if __name__ == "__main__":
     #task = "RECOGNITION"
     #task = "VISUAL_PROMPTING"
     #task = "SPATIAL_REASONING"
-    task = "OBEJECT_DETECTION"
+    task = "OBJECT_DETECTION"
     
     model_type = "GPT"
     #model_type = "OF"
@@ -1040,7 +1047,7 @@ if __name__ == "__main__":
 
         detectionPrompt = None
 
-    elif (task == "OBEJECT_DETECTION"):
+    elif (task == "OBJECT_DETECTION"):
         
         if (usePairs):
             path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_pairs_detection"
@@ -1051,8 +1058,8 @@ if __name__ == "__main__":
         
     #generate_prompts_spatial(path, usePairs)
 
-    #test_spatial(path, model_type, usePairs, task, detectionPrompt)
+    test_spatial(path, model_type, usePairs, task, detectionPrompt)
 
     #score_prompting_and_rec(path, model_type, usePairs, task, detectionPrompt)
 
-    score_detection(path, model_type)
+    #score_detection(path, model_type)
