@@ -76,13 +76,15 @@ def create_prompts(a, relation, relations, b=None, options=False):
     relationsA = relations      
     random.shuffle(relationsA)
 
+    verb = "Are" if a[-1] == "s" else "Is"
+
     if (b):
         relationsA = ", ".join(relationsA[:-1]) + ", or " + get_relation(relationsA[-1])        
-        prompt = "Is the " + a + " " + relationsA + " the " + b  + " in the image?"
+        prompt = verb + " the " + a + " " + relationsA + " the " + b  + " in the image?"
     else:
         relationsA = ", ".join(relationsA[:-1]) + ", or " + relationsA[-1]
         
-        prompt = "Is the " + a + " on the " + relationsA + " of the image?"
+        prompt = verb + " the " + a + " on the " + relationsA + " of the image?"
 
     if (options):
         relationsChoices = relations
@@ -119,6 +121,8 @@ def create_prompts_single_clip(a, relation, relations):
 def check_answer(correct_relation, relations, answer_text):
 
     answer_text = answer_text.lower()
+    answer_text = answer_text.replace("sofa", "couch")
+    answer_text = answer_text.replace("sneakers", "shoes")
 
     total_count = 0
     relations_count = {}
@@ -138,7 +142,7 @@ def check_answer(correct_relation, relations, answer_text):
 
 def getGPT4():
     from azure.identity import DefaultAzureCredential 
-    RESOURCE_NAME = "gpt-visual-wus" 
+    RESOURCE_NAME = "gpt-visual-api" 
     DEPLOYMENT_NAME = "gpt-visual" 
 
     # Get the AAD token for current logged-in user 
@@ -158,16 +162,16 @@ def getGPT4():
     #endpoint = f"{base_url}/rainbow?api-version=2023-03-15-preview" 
     #endpoint = f"{base_url}/rainbow?api-version=2023-09-15-preview" 
     #endpoint = f"{base_url}/chat/completions?api-version=2023-09-15-preview"
-    endpoint = f"{base_url}/chat/completions?api-version=2023-07-01-preview"
+    endpoint = f"{base_url}/chat/completions?api-version=2023-08-01-preview"
         
-    return headers, endpoint
+    return headers, endpoint 
 
 def getOpenFlamingo():
     import open_flamingo
     from huggingface_hub import hf_hub_download
 
-    #clip_vision_encoder_pretrained = "E:/Source/open_clip/logs/best_spatial_checkpoint/epoch_1.pt"
-    clip_vision_encoder_pretrained = "openai"
+    clip_vision_encoder_pretrained = "E:/Source/open_clip/logs/best_spatial_checkpoint/epoch_2.pt"
+    #clip_vision_encoder_pretrained = "openai"
     #clip_vision_encoder_pretrained = "laion2b_s32b_b82k"
     
     model, image_processor, tokenizer = open_flamingo.create_model_and_transforms(
@@ -204,12 +208,12 @@ def getLLaVA():
     
     return model, image_processor, tokenizer 
 
-def getOpenCLIP():
+def getOpenCLIP(arch = "ViT-L-14", pretrained = 'openai'):
     
-    arch = "ViT-L-14"
+    #arch = "ViT-L-14"
     #arch = 'ViT-L-14-336'
     #pretrained = 'openai'
-    pretrained = "E:/Source/open_clip/logs/best_spatial_checkpoint/epoch_1.pt"
+    #pretrained = "E:/Source/open_clip/logs/best_spatial_checkpoint/epoch_1.pt"
     
     model, _, preprocess = open_clip.create_model_and_transforms(arch, pretrained=pretrained)
     tokenizer = open_clip.get_tokenizer(arch)
@@ -576,7 +580,7 @@ def llm_eval(model_type, model, image_processor, headers, endpoint, tokenizer, i
     elif (model_type == "PHI2V"):                                
         answer_text = generate_text_phi2v(query_image, query_text)  
 
-    elif (model_type == "CLIP"):                                
+    elif (model_type == "CLIP" or model_type == "CLIP_336" or model_type == "CLIP_SFT"): 
         answer_text = generate_zeroshot_clip(model, image_processor, tokenizer, query_image, a, b, relation, relations)  
         
     elif (model_type == "FASTERRCNN"):
@@ -585,6 +589,19 @@ def llm_eval(model_type, model, image_processor, headers, endpoint, tokenizer, i
     return answer_text
 
 def check_dectection_answer(answer_text, a, b=None):
+
+    answer_text = answer_text.lower()
+    answer_text = answer_text.replace("sofa", "couch")
+    answer_text = answer_text.replace("sneakers", "shoes")
+    answer_text = answer_text.replace("sneaker", "shoes")
+    answer_text = answer_text.replace("shoe", "shoes")
+    answer_text = answer_text.replace("weight", "dumbbell")
+    
+    if (a): 
+        a = a.lower()
+    if (b):
+        b = b.lower()
+
     a_parts = a.split(" ")                
     ps = []
 
@@ -659,7 +676,11 @@ def test_spatial(path, model_type, usePairs, task, detectionPrompt=None):
     elif (model_type == "LLAVA"):
         model, image_processor, tokenizer = getLLaVA()
     elif (model_type == "CLIP"):
-        model, image_processor, tokenizer = getOpenCLIP()
+        model, image_processor, tokenizer = getOpenCLIP(arch = "ViT-L-14", pretrained = 'openai')
+    elif (model_type == "CLIP_SFT"):
+        model, image_processor, tokenizer = getOpenCLIP(arch = "ViT-L-14", pretrained = 'E:/Source/open_clip/logs/best_spatial_checkpoint/epoch_2.pt')
+    elif (model_type == "CLIP_336"):
+        model, image_processor, tokenizer = getOpenCLIP(arch = "ViT-L-14-336", pretrained = 'openai')        
     elif (model_type == "FASTERRCNN"):
         model = getFasterRCNN()        
         
@@ -812,9 +833,6 @@ def score_prompting_and_rec(path, model_type, usePairs, recognition, detectionPr
         else:
             a = parts[1]
             b = ""
-       
-        answer_text = answer_text.lower()
-        answer_text = answer_text.replace("sofa", "couch")
 
         if ("filtered" in answer_text):
             pred = "none"
@@ -980,10 +998,13 @@ def generate_prompts_spatial(path, usePairs):
 
         if (usePairs):
             a, b = parts[1].split("_")
+            a = a.lower()
+            b = b.lower()            
         else:
             a = parts[1]
-            b = None
-
+            a = a.lower()
+            b = None            
+        
         relation = parts[2]
 
         query_text = create_prompts(a, relation, relations, b=b, options=True)
@@ -1008,23 +1029,25 @@ if __name__ == "__main__":
     
     usePairs = False
     
-    #task = "RECOGNITION"
+    task = "RECOGNITION"
     #task = "VISUAL_PROMPTING"
     #task = "SPATIAL_REASONING"
-    task = "OBJECT_DETECTION"
+    #task = "OBJECT_DETECTION"
     
     model_type = "GPT"
     #model_type = "OF"
     #model_type = "LLAVA"
     #model_type = "PHI2V"
     #model_type = "CLIP"
+    #model_type = "CLIP_SFT"
+    #model_type = "CLIP_336"
     #model_type = "FASTERRCNN"
 
     if (task == "RECOGNITION"):
         if (usePairs):
-            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_pairs_backgrounds"
+            path = drive + "/Source/EffortlessCVSystem/Data/nococo_spatial_pairs_backgrounds"
         else:
-            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_single_backgrounds"
+            path = drive + "/Source/EffortlessCVSystem/Data/nococo_spatial_single_backgrounds"
 
         detectionPrompt = "What objects are in this image?"
         
@@ -1041,9 +1064,9 @@ if __name__ == "__main__":
     elif (task == "SPATIAL_REASONING"):
 
         if (usePairs):
-            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_pairs_backgrounds"
+            path = drive + "/Source/EffortlessCVSystem/Data/nococo_spatial_pairs_backgrounds"
         else:
-            path = drive + "/Source/EffortlessCVSystem/Data/coco_spatial_single_backgrounds"
+            path = drive + "/Source/EffortlessCVSystem/Data/nococo_spatial_single_backgrounds"
 
         detectionPrompt = None
 
